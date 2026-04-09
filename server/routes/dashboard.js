@@ -48,7 +48,7 @@ router.get('/', async (req, res) => {
     )
   ]);
 
-  const pipelineValue = projects.reduce((sum, p) => sum + (p.budget_cents || 0), 0);
+  const pipelineValue = projects.reduce((sum, p) => sum + parseInt(p.budget_cents || 0), 0);
 
   res.json({
     kpis: {
