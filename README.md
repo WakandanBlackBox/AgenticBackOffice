@@ -1,88 +1,67 @@
-# AI Agents Hackathon #31
+# BackOffice Agent
 
-**Event:** OSS4AI AI Agents Hackathon #31
-**Dates:** April 11-12, 2026 (36 hours, 9 AM - 9 PM PST)
-**Format:** Virtual | Teams of 1-3 | Free entry
-**Prize:** Up to $50k in investments; 1st place interviews for $30k from Gravitational Ventures + Beta Fund AI Explorer program
-**Judging:** AI Consortium leaders, 1-4 rating scale
+AI-powered back-office platform for freelancers and agencies. Five specialized agents handle proposals, invoices, contracts, scope management, and business insights -- replacing 5+ tools with one intelligent system.
 
-## Project: NeuroAgent TC
+> Stop losing $11,400/year to scope creep. BackOffice Agent is your AI operations team.
 
-AI-powered transaction coordination agents for real estate professionals — built for neurodivergent workflows.
+## Agents
 
-### Core Concept
+| Agent | Model | Purpose |
+|-------|-------|---------|
+| **Proposal Agent** | Sonnet | Generates context-aware proposals with pricing, timeline, deliverables |
+| **Invoice Agent** | Haiku | Creates, tracks, and chases invoices |
+| **Contract Agent** | Sonnet | Drafts contracts, reviews incoming ones, flags risky clauses |
+| **Scope Guardian** | Sonnet | Real-time scope creep intervention with change order generation |
+| **Insight Agent** | Haiku | Revenue analytics, overdue tracking, milestone celebrations |
 
-4 cooperating AI agents that automate the transaction coordination workflow:
-
-1. **Contract Intake Agent** — Extracts parties, dates, prices, contingencies from uploaded PDFs
-2. **Deadline Guardian Agent** — Monitors active transactions, calculates business days, sends proactive alerts
-3. **Communication Agent** — Drafts milestone emails to all parties (buyers, sellers, agents, lenders, title)
-4. **Compliance Agent** — Checks documents against brokerage checklists, flags missing items
-
-### Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────┐
-│         Orchestrator Agent          │
-│   (Routes tasks, maintains state)   │
-└──────────┬──────────────────────────┘
-           │
-    ┌──────┼──────────┬───────────────┐
-    ▼      ▼          ▼               ▼
-┌────────┐┌─────────┐┌────────────┐┌──────────┐
-│Contract││Deadline ││Communication││Compliance│
-│Intake  ││Guardian ││  Agent     ││  Agent   │
-│Agent   ││Agent    ││            ││          │
-└────────┘└─────────┘└────────────┘└──────────┘
+Express API + React Frontend (Railway)
+    |
+    v
+Agent Dispatcher (intent routing + workflow orchestration)
+    |
+    +-- Proposal Agent (Sonnet) -- 5 tools
+    +-- Invoice Agent (Haiku)   -- 4 tools
+    +-- Contract Agent (Sonnet) -- 4 tools
+    +-- Scope Guardian (Sonnet) -- 3 tools
+    +-- Insight Agent (Haiku)   -- 3 tools
+    |
+    v
+PostgreSQL (8 tables, JSONB documents)
 ```
 
-### Existing Assets
+## Quick Start
 
-Built on top of three existing projects:
+```bash
+# Install
+npm install
 
-- **Transaction Coordinator (TDM)** — Production real estate app with Claude PDF extraction, deadline tracking, PostgreSQL, AWS S3, compliance checklists
-- **ADHD Budget MCP** — Multi-agent dispatcher pattern (6 agents), MCP protocol, task orchestration with dependencies and priorities
-- **Flow State** — ADHD/neurodivergent market expertise, marketing infrastructure
+# Set up environment
+cp .env.example .env
+# Edit .env with your DATABASE_URL and ANTHROPIC_API_KEY
 
-### Business Case
+# Create database tables
+npm run db:migrate
 
-- **TAM:** 6M US transactions/year x $350 avg TC fee = $2.1B
-- **Wedge:** Solo agents and small brokerages who can't afford a TC
-- **Moat:** State-specific compliance rules + business day logic
-- **Revenue:** SaaS — $49/mo per agent, $199/mo per brokerage
+# Run development servers
+npm run dev
+```
 
-### 36-Hour Build Plan
+## Tech Stack
 
-| Phase | Hours | Focus |
-|-------|-------|-------|
-| Foundation | 0-4 | Fork TDM, extract agent-dispatcher pattern from ADHD Budget MCP |
-| Core Agents | 4-16 | Wire up 4 agents with Claude tool_use, ReAct orchestration |
-| Demo Polish | 16-28 | Dashboard, agent reasoning visibility, end-to-end demo flow |
-| Pitch | 28-36 | Pitch deck, business case, recorded demo |
+- **Backend:** Express 5, PostgreSQL, Zod, JWT + bcrypt
+- **AI:** Anthropic Claude SDK with tool_use (Haiku 4.5 + Sonnet 4.6)
+- **Frontend:** React 19, Vite
+- **Deploy:** Railway (combined service)
 
-### Tech Stack
+## Business Case
 
-- **Backend:** Node.js / Express / PostgreSQL
-- **AI:** Anthropic Claude SDK (tool_use, PDF extraction)
-- **Agent Pattern:** Dispatcher orchestration (ported from Python ADHD Budget MCP)
-- **Frontend:** React 19 / Vite
-- **Storage:** AWS S3 (document uploads)
-- **Email:** SendGrid
-- **Auth:** JWT + bcrypt
+- **Market:** $40.5B invoice processing market, 73M US freelancers, zero agentic competitors
+- **Moat:** Scope Guardian behavioral intervention (ported from production ADHD intervention system)
+- **Unit Economics:** ~$0.013/interaction, 78-82% gross margin at $55 ARPU
 
-### Key Whitepaper Insights Applied
+---
 
-From **"A Practical Guide to Building Agents"** (OpenAI):
-- Agent = Model + Tools + Instructions
-- Use most capable model first, optimize later
-- Three tool types: Data, Action, Orchestration
-
-From **"Agents" whitepaper** (Google):
-- ReAct orchestration loop for agent reasoning
-- Extensions bridge agents to external APIs
-- Cognitive architecture: observe → reason → act → adjust
-
-From **"Identifying and Scaling AI Use Cases"** (OpenAI):
-- Target workflows with complex decision-making, unstructured data, hard-to-maintain rules
-- Six primitives: content creation, research, coding, data analysis, automation, ideation
-- Real estate TC work hits all three pain points: repetitive tasks, skill bottlenecks, navigating ambiguity
+Built for [AI Agents Hackathon #31](https://luma.com/88o1d1d7) -- April 11-12, 2026
