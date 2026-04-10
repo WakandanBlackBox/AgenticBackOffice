@@ -139,13 +139,19 @@ const initialState = {
 
 function reducer(state, action) {
   switch (action.type) {
-    case 'SET_VIEW': return { ...state, view: action.view };
+    case 'SET_VIEW': {
+      localStorage.setItem('currentView', action.view);
+      return { ...state, view: action.view };
+    }
     case 'SET_AUTH': {
       localStorage.setItem('token', action.token);
-      return { ...state, user: action.user, token: action.token, authError: null, view: 'dashboard' };
+      const savedView = localStorage.getItem('currentView');
+      const restoreView = savedView && savedView !== 'auth' && savedView !== 'project_detail' ? savedView : 'dashboard';
+      return { ...state, user: action.user, token: action.token, authError: null, view: restoreView };
     }
     case 'LOGOUT': {
       localStorage.removeItem('token');
+      localStorage.removeItem('currentView');
       return { ...initialState, token: null, view: 'auth' };
     }
     case 'SET_AUTH_MODE': return { ...state, authMode: action.mode, authError: null };
@@ -674,6 +680,48 @@ function loadProjectDetail(id, dispatch, silent = false) {
   api(`/projects/${id}`).then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data })).catch(() => {});
 }
 
+function ProjectCard({ project: p, dispatch, statusColor, onRefresh }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleStatus = (status) => {
+    api(`/projects/${p.id}`, { method: 'PATCH', body: { status } }).then(onRefresh);
+    setMenuOpen(false);
+  };
+
+  return (
+    <div className="card-hover" style={{ ...S.card, cursor: 'pointer', position: 'relative' }}>
+      <div onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(p.id, dispatch); }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 600, marginRight: 28 }}>{p.name}</h3>
+        </div>
+        <p style={{ fontSize: 13, color: C.textMuted }}>{p.client_name || 'No client'}</p>
+        {p.budget_cents && <p style={{ fontSize: 18, fontWeight: 700, marginTop: 8, color: C.proposal }}>{fmt(p.budget_cents)}</p>}
+        <div style={{ marginTop: 10 }}><span style={S.badge(statusColor[p.status] || C.textDim)}>{p.status}</span></div>
+      </div>
+      {/* Three-dot menu */}
+      <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
+        style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: C.textDim, cursor: 'pointer', fontSize: 18, padding: '4px 8px', borderRadius: 6, lineHeight: 1 }}>
+        {'\u22EE'}
+      </button>
+      {menuOpen && (
+        <>
+          <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setMenuOpen(false)} />
+          <div style={{ position: 'absolute', top: 38, right: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4, zIndex: 100, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+            {['active', 'paused', 'completed', 'cancelled'].filter((s) => s !== p.status).map((s) => (
+              <button key={s} onClick={(e) => { e.stopPropagation(); handleStatus(s); }}
+                style={{ display: 'block', width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: s === 'cancelled' ? C.danger : C.textMuted, cursor: 'pointer', fontSize: 13, textAlign: 'left', borderRadius: 6, textTransform: 'capitalize' }}
+                onMouseEnter={(e) => { e.target.style.background = C.surfaceHover; }}
+                onMouseLeave={(e) => { e.target.style.background = 'none'; }}>
+                {s === 'cancelled' ? 'Cancel Project' : `Set ${s}`}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function ProjectsView({ state, dispatch }) {
   const [showNew, setShowNew] = useState(false);
   const [form, setForm] = useState({ name: '', description: '', budget_cents: '', client_id: '', scope_summary: '' });
@@ -729,15 +777,7 @@ function ProjectsView({ state, dispatch }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {state.projects.map((p) => (
-          <div key={p.id} className="card-hover" onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(p.id, dispatch); }}
-            style={{ ...S.card, cursor: 'pointer' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 600 }}>{p.name}</h3>
-              <span style={S.badge(statusColor[p.status] || C.textDim)}>{p.status}</span>
-            </div>
-            <p style={{ fontSize: 13, color: C.textMuted }}>{p.client_name || 'No client'}</p>
-            {p.budget_cents && <p style={{ fontSize: 18, fontWeight: 700, marginTop: 8, color: C.proposal }}>{fmt(p.budget_cents)}</p>}
-          </div>
+          <ProjectCard key={p.id} project={p} dispatch={dispatch} statusColor={statusColor} onRefresh={() => api('/projects').then(({ projects }) => dispatch({ type: 'SET_PROJECTS', projects }))} />
         ))}
       </div>
       {!state.projectsLoading && state.projects.length === 0 && <p style={{ color: C.textDim, textAlign: 'center', padding: 40 }}>No projects yet. Create your first project to get started.</p>}
@@ -1108,12 +1148,48 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
 function ProjectDetail({ state, dispatch }) {
   const [tab, setTab] = useState('proposals');
   const [showChat, setShowChat] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editForm, setEditForm] = useState(null);
   const p = state.selectedProject;
 
   if (state.projectDetailLoading || !p) return <p style={{ color: C.textMuted, padding: 40 }}>Loading project...</p>;
 
   const project = p.project || p;
   const refresh = () => loadProjectDetail(project.id, dispatch, true);
+
+  const handleStatusChange = async (newStatus) => {
+    await api(`/projects/${project.id}`, { method: 'PATCH', body: { status: newStatus } });
+    refresh();
+  };
+
+  const handleDelete = async () => {
+    await api(`/projects/${project.id}`, { method: 'PATCH', body: { status: 'cancelled' } });
+    dispatch({ type: 'SET_VIEW', view: 'projects' });
+    api('/projects').then(({ projects }) => dispatch({ type: 'SET_PROJECTS', projects })).catch(() => {});
+  };
+
+  const handleEdit = async (e) => {
+    e.preventDefault();
+    const body = {};
+    if (editForm.name !== project.name) body.name = editForm.name;
+    if (editForm.description !== (project.description || '')) body.description = editForm.description || undefined;
+    if (editForm.scope_summary !== (project.scope_summary || '')) body.scope_summary = editForm.scope_summary || undefined;
+    const newBudget = editForm.budget ? Math.round(parseFloat(editForm.budget) * 100) : null;
+    if (newBudget !== (project.budget_cents ? Number(project.budget_cents) : null)) body.budget_cents = newBudget;
+    if (Object.keys(body).length > 0) {
+      await api(`/projects/${project.id}`, { method: 'PATCH', body });
+      refresh();
+    }
+    setShowEdit(false);
+  };
+
+  const openEdit = () => {
+    setEditForm({ name: project.name, description: project.description || '', scope_summary: project.scope_summary || '', budget: project.budget_cents ? (Number(project.budget_cents) / 100).toString() : '' });
+    setShowEdit(true);
+  };
+
+  const statusColors = { active: C.success, completed: C.textDim, paused: C.warning, cancelled: C.danger };
   const tabs = [
     { id: 'proposals', label: 'Proposals', color: C.proposal, data: p.proposals || [] },
     { id: 'invoices', label: 'Invoices', color: C.invoice, data: p.invoices || [] },
@@ -1133,12 +1209,47 @@ function ProjectDetail({ state, dispatch }) {
             <h1 style={{ fontSize: 22, fontWeight: 700 }}>{project.name}</h1>
             <p style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}>{project.client_name || 'No client'}</p>
           </div>
-          <div style={{ textAlign: 'right' }}>
-            <span style={S.badge(C.success)}>{project.status}</span>
-            {project.budget_cents && <p style={{ fontSize: 22, fontWeight: 700, color: C.proposal, marginTop: 4 }}>{fmt(project.budget_cents)}</p>}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ textAlign: 'right' }}>
+              <span style={S.badge(statusColors[project.status] || C.textDim)}>{project.status}</span>
+              {project.budget_cents && <p style={{ fontSize: 22, fontWeight: 700, color: C.proposal, marginTop: 4 }}>{fmt(project.budget_cents)}</p>}
+            </div>
+            <button onClick={openEdit} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px' }}>Edit</button>
+            <button onClick={() => setShowDeleteConfirm(true)} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px', borderColor: C.danger + '44', color: C.danger }}>Delete</button>
           </div>
         </div>
+
+        {/* Status controls */}
+        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+          {['active', 'paused', 'completed', 'cancelled'].map((s) => (
+            <button key={s} onClick={() => handleStatusChange(s)} disabled={project.status === s}
+              style={{ ...S.btnOutline, fontSize: 11, padding: '4px 12px', borderColor: (statusColors[s] || C.textDim) + '44', color: project.status === s ? C.text : statusColors[s], background: project.status === s ? (statusColors[s] || C.textDim) + '22' : 'transparent', textTransform: 'capitalize', opacity: project.status === s ? 0.6 : 1 }}>
+              {s}
+            </button>
+          ))}
+        </div>
+
         {project.scope_summary && <p style={{ color: C.textMuted, fontSize: 13, marginTop: 12, padding: 12, background: C.bg, borderRadius: 8 }}>{project.scope_summary}</p>}
+
+        {/* Edit form */}
+        {showEdit && editForm && (
+          <form onSubmit={handleEdit} className="fade-in" style={{ marginTop: 12, padding: 16, background: C.bg, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input style={S.input} placeholder="Project name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+            <input style={S.input} placeholder="Description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+            <input style={S.input} type="number" step="0.01" placeholder="Budget ($)" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} />
+            <textarea style={{ ...S.input, minHeight: 60 }} placeholder="Scope summary" value={editForm.scope_summary} onChange={(e) => setEditForm({ ...editForm, scope_summary: e.target.value })} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" style={S.btn}>Save</button>
+              <button type="button" onClick={() => setShowEdit(false)} style={S.btnOutline}>Cancel</button>
+            </div>
+          </form>
+        )}
+
+        {/* Delete confirmation */}
+        {showDeleteConfirm && (
+          <ConfirmModal message={`Cancel project "${project.name}"? This will mark it as cancelled.`} onConfirm={() => { setShowDeleteConfirm(false); handleDelete(); }} onCancel={() => setShowDeleteConfirm(false)} />
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
           {[
             { label: 'Generate Proposal', msg: 'Write a proposal for this project with deliverables, timeline, and pricing.', color: C.proposal },
