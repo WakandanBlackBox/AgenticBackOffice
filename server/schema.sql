@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE users (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE clients (
+CREATE TABLE IF NOT EXISTS clients (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
@@ -20,7 +20,7 @@ CREATE TABLE clients (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   client_id UUID REFERENCES clients(id) ON DELETE SET NULL,
@@ -34,7 +34,7 @@ CREATE TABLE projects (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE proposals (
+CREATE TABLE IF NOT EXISTS proposals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -43,7 +43,7 @@ CREATE TABLE proposals (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE invoices (
+CREATE TABLE IF NOT EXISTS invoices (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -54,7 +54,7 @@ CREATE TABLE invoices (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE contracts (
+CREATE TABLE IF NOT EXISTS contracts (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -64,7 +64,7 @@ CREATE TABLE contracts (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE scope_events (
+CREATE TABLE IF NOT EXISTS scope_events (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -76,7 +76,7 @@ CREATE TABLE scope_events (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE agent_logs (
+CREATE TABLE IF NOT EXISTS agent_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   agent TEXT NOT NULL CHECK (agent IN ('proposal','invoice','contract','scope_guardian','insight','chief')),
@@ -91,12 +91,45 @@ CREATE TABLE agent_logs (
 );
 
 -- Indexes for common queries
-CREATE INDEX idx_clients_user ON clients(user_id);
-CREATE INDEX idx_projects_user ON projects(user_id);
-CREATE INDEX idx_projects_client ON projects(client_id);
-CREATE INDEX idx_proposals_project ON proposals(project_id);
-CREATE INDEX idx_invoices_project ON invoices(project_id);
-CREATE INDEX idx_invoices_status ON invoices(user_id, status);
-CREATE INDEX idx_contracts_project ON contracts(project_id);
-CREATE INDEX idx_scope_events_project ON scope_events(project_id);
-CREATE INDEX idx_agent_logs_user ON agent_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_clients_user ON clients(user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_user ON projects(user_id);
+CREATE INDEX IF NOT EXISTS idx_projects_client ON projects(client_id);
+CREATE INDEX IF NOT EXISTS idx_proposals_project ON proposals(project_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_project ON invoices(project_id);
+CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_contracts_project ON contracts(project_id);
+CREATE INDEX IF NOT EXISTS idx_scope_events_project ON scope_events(project_id);
+CREATE INDEX IF NOT EXISTS idx_agent_logs_user ON agent_logs(user_id, created_at DESC);
+
+-- Milestones for project progress tracking with client approval gates
+CREATE TABLE IF NOT EXISTS milestones (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT,
+  amount_cents BIGINT DEFAULT 0,
+  position INT NOT NULL DEFAULT 0,
+  approval_type TEXT DEFAULT 'approval_needed'
+    CHECK (approval_type IN ('auto','approval_needed')),
+  status TEXT DEFAULT 'pending'
+    CHECK (status IN ('pending','active','completed','approved','rejected')),
+  completed_at TIMESTAMPTZ,
+  approved_at TIMESTAMPTZ,
+  rejection_reason TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Share tokens for public client portal access
+CREATE TABLE IF NOT EXISTS share_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  client_name TEXT,
+  expires_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id, position);
+CREATE INDEX IF NOT EXISTS idx_share_tokens_token ON share_tokens(token);

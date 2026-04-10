@@ -350,9 +350,12 @@ function AuthView({ state, dispatch }) {
 function Sidebar({ state, dispatch }) {
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', icon: '\u25A0', color: C.accent },
-    { id: 'chat', label: 'AI Chat', icon: '\u25C6', color: C.primary },
     { id: 'projects', label: 'Projects', icon: '\u25B6', color: C.proposal },
     { id: 'clients', label: 'Clients', icon: '\u25CF', color: C.invoice },
+    { id: 'kanban', label: 'Milestone Board', icon: '\u25A6', color: C.warning },
+    { id: '_divider' },
+    { id: 'chat', label: 'AI Chat', icon: '\u25C6', color: C.primary },
+    { id: 'onboarding', label: 'Getting Started', icon: '\u2605', color: C.success },
     { id: 'activity', label: 'Activity Log', icon: '\u25E6', color: C.insight },
   ];
 
@@ -365,6 +368,7 @@ function Sidebar({ state, dispatch }) {
 
       <nav style={{ flex: 1, padding: '12px 0' }}>
         {navItems.map((item) => {
+          if (item.id === '_divider') return <div key="_divider" style={{ height: 1, background: C.border, margin: '8px 16px' }} />;
           const active = state.view === item.id || (item.id === 'projects' && state.view === 'project_detail');
           return (
             <button key={item.id} className="nav-item" onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}
@@ -917,6 +921,190 @@ function ProjectChat({ projectId, state, dispatch }) {
 }
 
 // ─── Project Detail ───────────────────────────────────────────────
+// ─── Milestone Panel ─────────────────────────────────────────────
+function MilestonePanel({ milestones, projectId, onRefresh }) {
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', description: '', amount: '', approval_type: 'approval_needed' });
+  const [shareUrl, setShareUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [completedNotice, setCompletedNotice] = useState(null);
+  const pollRef = useRef(null);
+
+  // Poll for client approval after marking complete
+  useEffect(() => {
+    const hasCompleted = milestones.some((m) => m.status === 'completed');
+    if (hasCompleted && !pollRef.current) {
+      pollRef.current = setInterval(() => { onRefresh(); }, 5000);
+    } else if (!hasCompleted && pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  }, [milestones, onRefresh]);
+
+  const approved = milestones.filter((m) => m.status === 'approved').length;
+  const progress = milestones.length > 0 ? Math.round((approved / milestones.length) * 100) : 0;
+
+  const statusColor = (s) => ({ pending: C.textDim, active: C.primary, completed: C.warning, approved: C.success, rejected: C.danger }[s] || C.textDim);
+  const statusIcon = (s) => ({ pending: '\u25CB', active: '\u25D4', completed: '\u25D0', approved: '\u25CF', rejected: '\u2716' }[s] || '\u25CB');
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api('/milestones', { method: 'POST', body: { project_id: projectId, title: form.title, description: form.description || undefined, amount_cents: form.amount ? Math.round(parseFloat(form.amount) * 100) : 0, approval_type: form.approval_type, position: milestones.length } });
+      setForm({ title: '', description: '', amount: '', approval_type: 'approval_needed' });
+      setShowForm(false);
+      onRefresh();
+    } catch { /* handled by UI */ }
+    setLoading(false);
+  };
+
+  const handleAction = async (id, action) => {
+    setLoading(true);
+    try {
+      const result = await api(`/milestones/${id}/${action}`, { method: 'POST' });
+      onRefresh();
+      if (action === 'complete' && !result.auto_approved) {
+        // Fetch or reuse share link and show notice
+        const { share_tokens } = await api(`/milestones/share?project_id=${projectId}`);
+        let link;
+        if (share_tokens.length > 0) {
+          link = window.location.origin + '/portal/' + share_tokens[0].token;
+        } else {
+          const { url } = await api('/milestones/share', { method: 'POST', body: { project_id: projectId } });
+          link = window.location.origin + url;
+        }
+        setShareUrl(link);
+        setCompletedNotice(link);
+        navigator.clipboard.writeText(link).catch(() => {});
+      }
+    } catch { /* handled by UI */ }
+    setLoading(false);
+  };
+
+  const handleDelete = async (id) => {
+    try { await api(`/milestones/${id}`, { method: 'DELETE' }); onRefresh(); } catch { /* noop */ }
+  };
+
+  const handleShare = async () => {
+    try {
+      // Reuse existing token if we have one
+      const { share_tokens } = await api(`/milestones/share?project_id=${projectId}`);
+      if (share_tokens.length > 0) {
+        const fullUrl = window.location.origin + '/portal/' + share_tokens[0].token;
+        setShareUrl(fullUrl);
+        navigator.clipboard.writeText(fullUrl).catch(() => {});
+        return;
+      }
+      const { url } = await api('/milestones/share', { method: 'POST', body: { project_id: projectId } });
+      const fullUrl = window.location.origin + url;
+      setShareUrl(fullUrl);
+      navigator.clipboard.writeText(fullUrl).catch(() => {});
+    } catch { /* noop */ }
+  };
+
+  return (
+    <div style={{ ...S.card, marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h3 style={{ fontSize: 16, fontWeight: 600 }}>Milestones</h3>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onRefresh} style={{ ...S.btnOutline, fontSize: 12 }} title="Refresh">Refresh</button>
+          <button onClick={() => setShowForm(!showForm)} style={{ ...S.btnOutline, fontSize: 12 }}>{showForm ? 'Cancel' : '+ Add'}</button>
+          <button onClick={handleShare} style={{ ...S.btnOutline, fontSize: 12, borderColor: C.accent + '44', color: C.accent }}>Share with Client</button>
+        </div>
+      </div>
+
+      {shareUrl && (
+        <div style={{ background: C.bg, borderRadius: 8, padding: 10, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: C.accent, wordBreak: 'break-all' }}>{shareUrl}</span>
+          <button onClick={() => { navigator.clipboard.writeText(shareUrl); }} style={{ ...S.btnOutline, fontSize: 11, marginLeft: 8, flexShrink: 0 }}>Copy</button>
+        </div>
+      )}
+
+      {/* Completion notice */}
+      {completedNotice && (
+        <div className="fade-in" style={{ background: C.success + '15', border: `1px solid ${C.success}44`, borderRadius: 10, padding: 14, marginBottom: 12 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: C.success, marginBottom: 6 }}>Milestone completed! Send this link to your client for approval:</p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: C.accent, wordBreak: 'break-all', flex: 1 }}>{completedNotice}</span>
+            <button onClick={() => { navigator.clipboard.writeText(completedNotice); }} style={{ ...S.btnOutline, fontSize: 11, flexShrink: 0 }}>Copy</button>
+            <button onClick={() => setCompletedNotice(null)} style={{ ...S.btnOutline, fontSize: 11, flexShrink: 0 }}>Dismiss</button>
+          </div>
+        </div>
+      )}
+
+      {/* Progress bar */}
+      {milestones.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.textMuted, marginBottom: 4 }}>
+            <span>{approved} of {milestones.length} approved</span>
+            <span>{progress}%</span>
+          </div>
+          <div style={{ background: C.bg, borderRadius: 6, height: 6, overflow: 'hidden' }}>
+            <div style={{ background: C.success, height: '100%', width: `${progress}%`, borderRadius: 6, transition: 'width 0.3s' }} />
+          </div>
+        </div>
+      )}
+
+      {/* Add form */}
+      {showForm && (
+        <form onSubmit={handleCreate} style={{ background: C.bg, borderRadius: 10, padding: 16, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input style={S.input} placeholder="Milestone title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+          <input style={S.input} placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <input style={S.input} type="number" step="0.01" placeholder="Amount ($)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+            {[{ value: 'approval_needed', label: 'Approval Needed' }, { value: 'auto', label: 'Auto-Approve' }].map((opt) => (
+              <button key={opt.value} type="button" onClick={() => setForm({ ...form, approval_type: opt.value })}
+                style={{ flex: 1, padding: '8px 0', background: form.approval_type === opt.value ? C.primary : 'transparent', color: form.approval_type === opt.value ? C.text : C.textMuted, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>Add Milestone</button>
+        </form>
+      )}
+
+      {/* Milestone stepper */}
+      {milestones.length === 0 && !showForm && <p style={{ color: C.textDim, fontSize: 13 }}>No milestones yet. Add milestones to track project progress.</p>}
+      {milestones.map((m, i) => {
+        // Only the current milestone (lowest position not yet approved) can be acted on
+        const currentIdx = milestones.findIndex((ms) => ms.status !== 'approved');
+        const isCurrent = i === currentIdx;
+        return (
+          <div key={m.id} style={{ display: 'flex', gap: 12 }}>
+            {/* Vertical line + status icon */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 24 }}>
+              <span style={{ color: statusColor(m.status), fontSize: 16, lineHeight: 1 }}>{statusIcon(m.status)}</span>
+              {i < milestones.length - 1 && <div style={{ width: 2, flex: 1, background: m.status === 'approved' ? C.success + '44' : C.border, margin: '4px 0' }} />}
+            </div>
+            {/* Content */}
+            <div style={{ flex: 1, paddingBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{m.title}</span>
+                  {m.amount_cents > 0 && <span style={{ marginLeft: 8, fontSize: 13, color: C.accent }}>{fmt(m.amount_cents)}</span>}
+                </div>
+                <span style={S.badge(statusColor(m.status))}>{m.status}</span>
+              </div>
+              {m.description && <p style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>{m.description}</p>}
+              {m.approval_type === 'auto' && m.status !== 'approved' && <span style={{ fontSize: 10, color: C.textDim, background: C.bg, padding: '2px 8px', borderRadius: 10, marginTop: 4, display: 'inline-block' }}>Auto-approve</span>}
+              {m.rejection_reason && <p style={{ color: C.danger, fontSize: 12, marginTop: 4 }}>Rejected: {m.rejection_reason}</p>}
+              {isCurrent && (
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  {(m.status === 'pending') && <button onClick={() => handleAction(m.id, 'activate')} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px' }}>Activate</button>}
+                  {(m.status === 'active') && <button onClick={() => handleAction(m.id, 'complete')} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px', borderColor: C.warning + '44', color: C.warning }}>Mark Complete</button>}
+                  {(m.status === 'pending') && <button onClick={() => handleDelete(m.id)} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px', borderColor: C.danger + '44', color: C.danger }}>Delete</button>}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ProjectDetail({ state, dispatch }) {
   const [tab, setTab] = useState('proposals');
   const [showChat, setShowChat] = useState(false);
@@ -931,6 +1119,7 @@ function ProjectDetail({ state, dispatch }) {
     { id: 'invoices', label: 'Invoices', color: C.invoice, data: p.invoices || [] },
     { id: 'contracts', label: 'Contracts', color: C.contract, data: p.contracts || [] },
     { id: 'scope_events', label: 'Scope Events', color: C.scope, data: p.scope_events || [] },
+    { id: 'milestones', label: 'Milestones', color: C.accent, data: p.milestones || [] },
   ];
   const activeTab = tabs.find((t) => t.id === tab);
 
@@ -974,6 +1163,9 @@ function ProjectDetail({ state, dispatch }) {
           <ProjectChat projectId={project.id} state={state} dispatch={dispatch} />
         </div>
       )}
+
+      {/* Milestones */}
+      <MilestonePanel milestones={p.milestones || []} projectId={project.id} onRefresh={refresh} />
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
@@ -1028,6 +1220,20 @@ function ProjectDetail({ state, dispatch }) {
 
       {tab === 'scope_events' && activeTab.data.map((ev, i) => (
         <ScopeEventCard key={ev.id || i} ev={ev} onDelete={refresh} />
+      ))}
+
+      {tab === 'milestones' && activeTab.data.map((m) => (
+        <div key={m.id} className="card-hover" style={{ ...S.card, marginBottom: 8 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <span style={{ fontWeight: 600, fontSize: 14 }}>{m.title}</span>
+              {m.amount_cents > 0 && <span style={{ marginLeft: 8, color: C.accent, fontSize: 13 }}>{fmt(m.amount_cents)}</span>}
+            </div>
+            <span style={S.badge(m.status === 'approved' ? C.success : m.status === 'rejected' ? C.danger : m.status === 'completed' ? C.warning : C.textDim)}>{m.status}</span>
+          </div>
+          {m.description && <p style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>{m.description}</p>}
+          {m.rejection_reason && <p style={{ color: C.danger, fontSize: 12, marginTop: 4 }}>Rejection: {m.rejection_reason}</p>}
+        </div>
       ))}
     </div>
   );
@@ -1114,6 +1320,105 @@ function ClientsView({ state, dispatch }) {
 }
 
 // ─── Activity Log ─────────────────────────────────────────────
+// ─── Onboarding KB View ──────────────────────────────────────────
+function OnboardingView() {
+  const [open, setOpen] = useState(null);
+  const sections = [
+    {
+      title: '1. Set Your Rate',
+      content: 'Research market rates for your skill set and experience level. Factor in taxes (as a 1099 contractor, set aside ~30% for self-employment tax), healthcare, software costs, and unpaid time (admin, sales, learning). A common formula: (desired salary + expenses) / billable hours per year. Start with hourly, move to project-based pricing as you gain confidence in estimating scope.'
+    },
+    {
+      title: '2. Land Your First Client',
+      content: 'Start with your network -- former colleagues, LinkedIn connections, local businesses. Create a simple portfolio showing 2-3 relevant examples (even personal projects count). Write a clear one-liner about what you do and who you help. Send 5 personalized outreach messages per day. When you get a lead, focus on understanding their problem before pitching your solution. Always follow up within 24 hours.'
+    },
+    {
+      title: '3. Protect Your Work',
+      content: 'Never start work without a signed contract. Key terms: scope of work (exactly what you will and will not deliver), payment schedule (50% upfront is standard), revision limits (2-3 rounds), IP transfer (only on final payment), kill fee (25-50% if they cancel mid-project), and timeline with milestones. Use this platform to generate contracts, track milestones, and get client approval at each stage so nothing falls through the cracks.'
+    },
+  ];
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Getting Started</h1>
+      <p style={{ color: C.textMuted, fontSize: 14, marginBottom: 24 }}>Three things every new freelancer needs to know</p>
+      {sections.map((s, i) => (
+        <div key={i} className="card-hover" style={{ ...S.card, marginBottom: 12, cursor: 'pointer' }} onClick={() => setOpen(open === i ? null : i)}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <h3 style={{ fontSize: 16, fontWeight: 600 }}>{s.title}</h3>
+            <span style={{ color: C.textDim, fontSize: 18, transform: open === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>{'\u25BE'}</span>
+          </div>
+          {open === i && <p style={{ color: C.textMuted, fontSize: 14, lineHeight: 1.7, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>{s.content}</p>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Kanban View ─────────────────────────────────────────────────
+function KanbanView({ state, dispatch }) {
+  const [milestones, setMilestones] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadAll = async () => {
+      setLoading(true);
+      try {
+        const { projects } = await api('/projects?status=active');
+        const all = [];
+        for (const p of projects.slice(0, 10)) {
+          try {
+            const { milestones: ms } = await api(`/milestones?project_id=${p.id}`);
+            ms.forEach((m) => all.push({ ...m, project_name: p.name, project_id: p.id }));
+          } catch { /* skip */ }
+        }
+        setMilestones(all);
+      } catch { /* noop */ }
+      setLoading(false);
+    };
+    loadAll();
+  }, []);
+
+  const columns = [
+    { status: 'pending', label: 'Pending', color: C.textDim },
+    { status: 'active', label: 'In Progress', color: C.primary },
+    { status: 'completed', label: 'Awaiting Approval', color: C.warning },
+    { status: 'approved', label: 'Approved', color: C.success },
+  ];
+
+  if (loading) return <p style={{ color: C.textMuted, padding: 40 }}>Loading milestones...</p>;
+
+  return (
+    <div>
+      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Milestone Board</h1>
+      <p style={{ color: C.textMuted, fontSize: 14, marginBottom: 24 }}>All milestones across active projects</p>
+      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 1fr)`, gap: 16, minHeight: 400 }}>
+        {columns.map((col) => {
+          const items = milestones.filter((m) => m.status === col.status);
+          return (
+            <div key={col.status} style={{ background: C.bg, borderRadius: 12, padding: 12, border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: `2px solid ${col.color}` }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: col.color }}>{col.label}</span>
+                <span style={S.badge(col.color)}>{items.length}</span>
+              </div>
+              {items.length === 0 && <p style={{ color: C.textDim, fontSize: 12, textAlign: 'center', padding: 20 }}>No milestones</p>}
+              {items.map((m) => (
+                <div key={m.id} className="card-hover" style={{ ...S.card, padding: 12, marginBottom: 8, cursor: 'pointer' }}
+                  onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' }); api(`/projects/${m.project_id}`).then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data })); }}>
+                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{m.title}</p>
+                  <p style={{ fontSize: 11, color: C.textMuted }}>{m.project_name}</p>
+                  {m.amount_cents > 0 && <p style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>{fmt(m.amount_cents)}</p>}
+                  {m.approval_type === 'auto' && <span style={{ fontSize: 9, color: C.textDim, background: C.surface, padding: '1px 6px', borderRadius: 8, marginTop: 4, display: 'inline-block' }}>Auto</span>}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ActivityLogView({ state, dispatch }) {
   const [logs, setLogs] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -1246,8 +1551,152 @@ function ActivityLogEntry({ log, estimateCost }) {
 }
 
 // ─── App ──────────────────────────────────────────────────────────
+// ─── Client Portal View (public, no auth) ───────────────────────
+function ClientPortalView({ token }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
+  const [rejectId, setRejectId] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const load = useCallback((silent) => {
+    if (!silent) setLoading(true);
+    fetch(`/api/portal/${token}`)
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error('Invalid or expired link')))
+      .then((d) => { setData(d); setError(null); })
+      .catch((e) => setError(e.message))
+      .finally(() => { if (!silent) setLoading(false); });
+  }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // Poll for freelancer updates every 5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => load(true), 5000);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  const handleApprove = async (milestoneId) => {
+    setActionLoading(milestoneId);
+    try {
+      await fetch(`/api/portal/${token}/milestones/${milestoneId}/approve`, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+      load();
+    } catch { /* noop */ }
+    setActionLoading(null);
+  };
+
+  const handleReject = async (milestoneId) => {
+    if (!rejectReason.trim()) return;
+    setActionLoading(milestoneId);
+    try {
+      await fetch(`/api/portal/${token}/milestones/${milestoneId}/reject`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: rejectReason }) });
+      setRejectId(null);
+      setRejectReason('');
+      load();
+    } catch { /* noop */ }
+    setActionLoading(null);
+  };
+
+  const statusColor = (s) => ({ pending: '#5A6178', active: '#6C5CE7', completed: '#FDCB6E', approved: '#00B894', rejected: '#E17055' }[s] || '#5A6178');
+  const statusIcon = (s) => ({ pending: '\u25CB', active: '\u25D4', completed: '\u25D0', approved: '\u25CF', rejected: '\u2716' }[s] || '\u25CB');
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0F1117', color: '#F1F2F6' }}><p>Loading...</p></div>;
+  if (error) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#0F1117', color: '#E17055' }}><div style={{ textAlign: 'center' }}><p style={{ fontSize: 48, marginBottom: 12 }}>&#9670;</p><p style={{ fontSize: 18 }}>{error}</p></div></div>;
+
+  const { project_name, freelancer_name, business_name, milestones, progress } = data;
+  const pct = milestones.length > 0 ? Math.round((progress.approved / progress.total) * 100) : 0;
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0F1117', color: '#F1F2F6', padding: '40px 20px' }}>
+      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+        {/* Header */}
+        <div style={{ textAlign: 'center', marginBottom: 32 }}>
+          <p style={{ fontSize: 36, marginBottom: 8 }}>&#9670;</p>
+          <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>{project_name}</h1>
+          <p style={{ color: '#8B92A8', fontSize: 14 }}>{business_name || freelancer_name}</p>
+        </div>
+
+        {/* Progress */}
+        <div style={{ background: '#1A1D27', borderRadius: 14, padding: 22, border: '1px solid #2E3346', marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#8B92A8', marginBottom: 8 }}>
+            <span>Project Progress</span>
+            <span>{progress.approved} of {progress.total} milestones approved ({pct}%)</span>
+          </div>
+          <div style={{ background: '#0F1117', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+            <div style={{ background: '#00B894', height: '100%', width: `${pct}%`, borderRadius: 6, transition: 'width 0.3s' }} />
+          </div>
+        </div>
+
+        {/* Milestones */}
+        {milestones.map((m, i) => (
+          <div key={m.id} style={{ display: 'flex', gap: 16, marginBottom: i < milestones.length - 1 ? 0 : 0 }}>
+            {/* Stepper */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: 28 }}>
+              <span style={{ color: statusColor(m.status), fontSize: 18, lineHeight: 1 }}>{statusIcon(m.status)}</span>
+              {i < milestones.length - 1 && <div style={{ width: 2, flex: 1, background: m.status === 'approved' ? '#00B89444' : '#2E3346', margin: '6px 0' }} />}
+            </div>
+            {/* Content */}
+            <div style={{ flex: 1, background: '#1A1D27', borderRadius: 12, padding: 18, border: `1px solid ${m.status === 'completed' ? '#FDCB6E44' : '#2E3346'}`, marginBottom: 12 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <span style={{ fontWeight: 600, fontSize: 15 }}>{m.title}</span>
+                  {m.amount_cents > 0 && <span style={{ marginLeft: 8, color: '#00D2D3', fontSize: 14 }}>${(m.amount_cents / 100).toLocaleString()}</span>}
+                </div>
+                <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: statusColor(m.status) + '18', color: statusColor(m.status) }}>{m.status}</span>
+              </div>
+              {m.description && <p style={{ color: '#8B92A8', fontSize: 13, marginTop: 8 }}>{m.description}</p>}
+              {m.rejection_reason && <p style={{ color: '#E17055', fontSize: 13, marginTop: 8 }}>Rejected: {m.rejection_reason}</p>}
+              {m.approved_at && <p style={{ color: '#00B894', fontSize: 11, marginTop: 8 }}>Approved {new Date(m.approved_at).toLocaleDateString()}</p>}
+
+              {/* Client actions */}
+              {m.status === 'completed' && (
+                <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => handleApprove(m.id)} disabled={actionLoading === m.id}
+                    style={{ background: '#00B894', color: '#F1F2F6', border: 'none', borderRadius: 10, padding: '8px 20px', cursor: 'pointer', fontWeight: 600, fontSize: 13, opacity: actionLoading === m.id ? 0.6 : 1 }}>
+                    Approve
+                  </button>
+                  {rejectId === m.id ? (
+                    <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                      <input style={{ background: '#0F1117', border: '1px solid #2E3346', borderRadius: 8, padding: '8px 12px', color: '#F1F2F6', fontSize: 13, flex: 1 }} placeholder="Reason for rejection" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
+                      <button onClick={() => handleReject(m.id)} disabled={actionLoading === m.id}
+                        style={{ background: '#E17055', color: '#F1F2F6', border: 'none', borderRadius: 8, padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Send</button>
+                      <button onClick={() => { setRejectId(null); setRejectReason(''); }}
+                        style={{ background: 'transparent', color: '#8B92A8', border: '1px solid #2E3346', borderRadius: 8, padding: '8px 12px', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setRejectId(m.id)}
+                      style={{ background: 'transparent', color: '#E17055', border: '1px solid #E1705544', borderRadius: 10, padding: '8px 20px', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+                      Request Changes
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {milestones.length === 0 && (
+          <div style={{ background: '#1A1D27', borderRadius: 14, padding: 40, border: '1px solid #2E3346', textAlign: 'center' }}>
+            <p style={{ color: '#8B92A8' }}>No milestones have been added to this project yet.</p>
+          </div>
+        )}
+
+        {/* Footer */}
+        <p style={{ textAlign: 'center', color: '#5A6178', fontSize: 11, marginTop: 32 }}>Powered by BackOffice Agent</p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+
+  // Portal detection: render public view if URL matches /portal/:token
+  const portalMatch = window.location.pathname.match(/^\/portal\/([a-f0-9]{64})$/);
+  if (portalMatch) {
+    return <ClientPortalView token={portalMatch[1]} />;
+  }
 
   // Boot: validate stored token
   useEffect(() => {
@@ -1279,6 +1728,8 @@ export default function App() {
     projects: ProjectsView,
     project_detail: ProjectDetail,
     clients: ClientsView,
+    kanban: KanbanView,
+    onboarding: OnboardingView,
     activity: ActivityLogView,
   };
   const View = viewMap[state.view] || DashboardView;
