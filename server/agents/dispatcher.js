@@ -1,11 +1,28 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AGENTS, AGENT_LIST } from './agent-config.js';
-import { getToolDefs, executeTool } from './tools.js';
+import { getToolDefs, executeTool, capResultSize } from './tools.js';
 import { setRunAgent, DELEGATE_TOOL_DEF, executeDelegation } from './delegate.js';
 import db from '../db.js';
 
 if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY environment variable is required');
 const client = new Anthropic();
+
+// Per-million-token pricing (USD) -- update when models change
+const MODEL_PRICING = {
+  'claude-haiku-4-5-20251001': { input: 0.80, output: 4.00, cache_write: 1.00, cache_read: 0.08 },
+  'claude-sonnet-4-5-20241022': { input: 3.00, output: 15.00, cache_write: 3.75, cache_read: 0.30 }
+};
+
+function estimateCost(model, inputTokens, outputTokens, cacheCreation = 0, cacheRead = 0) {
+  const p = MODEL_PRICING[model] || MODEL_PRICING['claude-haiku-4-5-20251001'];
+  const uncachedInput = Math.max(0, inputTokens - cacheRead);
+  return parseFloat((
+    (uncachedInput / 1_000_000) * p.input +
+    (outputTokens / 1_000_000) * p.output +
+    (cacheCreation / 1_000_000) * p.cache_write +
+    (cacheRead / 1_000_000) * p.cache_read
+  ).toFixed(6));
+}
 
 // Route a natural language query to the best agent by intent score
 export function routeToAgent(query) {
@@ -52,8 +69,20 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
   const startTime = Date.now();
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+  let cacheCreationTokens = 0;
+  let cacheReadTokens = 0;
 
   yield { type: 'agent_start', agent: agent.id, name: agent.name };
+
+  // System prompt with cache_control -- cached after first call, saving ~90% on re-reads
+  const systemWithCache = [
+    { type: 'text', text: agent.system, cache_control: { type: 'ephemeral' } }
+  ];
+
+  // Mark last tool def for caching -- tools are static per agent
+  const cachedTools = tools.map((t, i) =>
+    i === tools.length - 1 ? { ...t, cache_control: { type: 'ephemeral' } } : t
+  );
 
   const maxIterations = agentId === 'chief' ? 12 : 5;
   const maxTotalTokens = agentId === 'chief' ? 30000 : 15000;
@@ -64,13 +93,15 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
     const response = await client.messages.create({
       model: agent.model,
       max_tokens: agent.maxTokens,
-      system: agent.system,
+      system: systemWithCache,
       messages,
-      tools
+      tools: cachedTools
     });
 
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;
+    cacheCreationTokens += response.usage?.cache_creation_input_tokens || 0;
+    cacheReadTokens += response.usage?.cache_read_input_tokens || 0;
 
     // Process content blocks
     const textBlocks = [];
@@ -107,7 +138,7 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
       }
 
       yield { type: 'tool_result', tool: toolUse.name, result };
-      toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
+      toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: capResultSize(JSON.stringify(result)) });
     }
 
     messages.push({ role: 'user', content: toolResults });
@@ -118,14 +149,28 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
 
   const durationMs = Date.now() - startTime;
 
-  // Log agent execution
+  // Log agent execution -- store only input message and final text, not full conversation history
+  const finalText = messages
+    .filter((m) => m.role === 'assistant')
+    .flatMap((m) => (Array.isArray(m.content) ? m.content : [m.content]))
+    .filter((b) => typeof b === 'string' || b?.type === 'text')
+    .map((b) => (typeof b === 'string' ? b : b.text))
+    .join('');
+  const outputLog = { summary: finalText.slice(0, 500), iterations: messages.filter((m) => m.role === 'assistant').length };
+
   await db.query(
     `INSERT INTO agent_logs (user_id, agent, project_id, input, output, model, input_tokens, output_tokens, duration_ms)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-    [userId, agent.id, projectId || null, JSON.stringify({ message: userMessage }), JSON.stringify({ messages }), agent.model, totalInputTokens, totalOutputTokens, durationMs]
+    [userId, agent.id, projectId || null, JSON.stringify({ message: userMessage.slice(0, 500) }), JSON.stringify(outputLog), agent.model, totalInputTokens, totalOutputTokens, durationMs]
   );
 
-  yield { type: 'agent_complete', agent: agent.id, duration_ms: durationMs, tokens: { input: totalInputTokens, output: totalOutputTokens } };
+  yield {
+    type: 'agent_complete',
+    agent: agent.id,
+    duration_ms: durationMs,
+    tokens: { input: totalInputTokens, output: totalOutputTokens, cache_creation: cacheCreationTokens, cache_read: cacheReadTokens },
+    cost_estimate_usd: estimateCost(agent.model, totalInputTokens, totalOutputTokens, cacheCreationTokens, cacheReadTokens)
+  };
 }
 
 // Wire up late binding for delegation

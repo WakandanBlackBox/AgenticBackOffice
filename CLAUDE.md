@@ -76,3 +76,22 @@ npm run dev:client    # Vite dev server (port 5173)
 npm run build         # Build React for production
 npm run db:migrate    # Run schema.sql
 ```
+
+## Work Rules
+
+### Token Management (Server-Side)
+- Every agent system prompt must use `cache_control: { type: 'ephemeral' }` on the system message
+- Mark the last tool definition with `cache_control` so tool schemas are cached across iterations
+- System prompts must stay under 200 words. No verbose examples -- use compressed rule lists
+- `maxTokens` must be tuned per agent. Simple agents (invoice, insight) get lower caps (512-768)
+- Tool results sent back to the model are capped at 2000 chars via `capResultSize()`
+- DB queries in tools must use LIMIT clauses (max 5 rows) and SELECT only needed columns
+- `get_past_proposals` returns titles/pricing only, never full proposal content
+- Delegation responses truncated to 1500 chars before returning to Chief
+- Agent logs store only input summary (500 chars) and output summary (500 chars), not full conversation
+- Scope creep classifier skips messages under 20 chars or without scope-creep keywords
+- All agent endpoints are gated by daily token budget (`token-budget.js`)
+- `DAILY_TOKEN_BUDGET` env var controls per-user daily limit (default: 500,000 tokens)
+- Cost estimates use `estimateCost()` in dispatcher and are included in `agent_complete` events
+- When adding new tools, keep `input_schema` minimal -- every property adds to cached tool token count
+- When adding new agents, follow the compressed prompt pattern in `agent-config.js`
