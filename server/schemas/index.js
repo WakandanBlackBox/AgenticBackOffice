@@ -65,3 +65,9 @@ export const analyzeScopeSchema = z.object({
 export const generateInsightSchema = z.object({
   period: z.enum(['week', 'month', 'quarter']).default('month')
 });
+
+// Chat
+export const chatSchema = z.object({
+  message: z.string().min(1).max(5000),
+  project_id: z.string().uuid().optional()
+});

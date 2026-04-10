@@ -26,13 +26,17 @@ const TOOL_DEFS = {
   // === PROPOSAL TOOLS ===
   get_client_history: {
     name: 'get_client_history',
-    description: 'Get past projects and invoices for a client to understand the relationship.',
+    description: 'Get past projects and invoices for a client. The client_id must be a valid UUID (get it from get_project_context first).',
     input_schema: {
       type: 'object',
-      properties: { client_id: { type: 'string', description: 'Client UUID' } },
+      properties: { client_id: { type: 'string', description: 'Client UUID (from get_project_context result, NOT the client name)' } },
       required: ['client_id']
     },
     fn: async (args, userId) => {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(args.client_id)) {
+        return { success: false, error: `"${args.client_id}" is not a valid UUID. Use the client_id from get_project_context (e.g. "7fef35bc-ed7c-45c3-89a2-14b33fb86483").` };
+      }
       const projects = await db.many(
         'SELECT id, name, status, budget_cents, created_at FROM projects WHERE client_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 10',
         [args.client_id, userId]
@@ -80,19 +84,32 @@ const TOOL_DEFS = {
 
   save_proposal: {
     name: 'save_proposal',
-    description: 'Save a generated proposal to the database.',
+    description: 'Save a proposal to the database. Pass ALL proposal details in the content object.',
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string', description: 'Project UUID' },
-        content: { type: 'object', description: 'Proposal content with sections and pricing' }
+        title: { type: 'string', description: 'Proposal title, e.g. "Website Redesign Proposal"' },
+        deliverables: { type: 'string', description: 'Comma-separated list of deliverables' },
+        pricing_total_cents: { type: 'number', description: 'Total price in cents' },
+        timeline: { type: 'string', description: 'Timeline summary, e.g. "6 weeks"' },
+        scope_summary: { type: 'string', description: 'Brief scope description' },
+        notes: { type: 'string', description: 'Any additional notes, budget advisories, or exclusions' }
       },
-      required: ['project_id', 'content']
+      required: ['project_id', 'title']
     },
     fn: async (args, userId) => {
+      const content = {
+        title: args.title,
+        deliverables: args.deliverables,
+        pricing_total_cents: args.pricing_total_cents,
+        timeline: args.timeline,
+        scope_summary: args.scope_summary,
+        notes: args.notes
+      };
       const row = await db.one(
         'INSERT INTO proposals (project_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, status, created_at',
-        [args.project_id, userId, JSON.stringify(args.content)]
+        [args.project_id, userId, JSON.stringify(content)]
       );
       return { success: true, data: row };
     }
@@ -180,20 +197,22 @@ const TOOL_DEFS = {
 
   save_contract: {
     name: 'save_contract',
-    description: 'Save a generated contract to the database.',
+    description: 'Save a generated contract to the database. The content must be a JSON object with contract clauses.',
     input_schema: {
       type: 'object',
       properties: {
         project_id: { type: 'string', description: 'Project UUID' },
-        content: { type: 'object', description: 'Contract content with clauses' },
+        content: { description: 'Contract content object with clauses. Must be a non-null object.' },
         flags: { type: 'array', description: 'Flagged clauses with severity', items: { type: 'object' } }
       },
       required: ['project_id', 'content']
     },
     fn: async (args, userId) => {
+      const content = args.content || {};
+      const serialized = typeof content === 'string' ? content : JSON.stringify(content);
       const row = await db.one(
         'INSERT INTO contracts (project_id, user_id, content, flags) VALUES ($1, $2, $3, $4) RETURNING id, status, created_at',
-        [args.project_id, userId, JSON.stringify(args.content), JSON.stringify(args.flags || [])]
+        [args.project_id, userId, serialized, JSON.stringify(args.flags || [])]
       );
       return { success: true, data: row };
     }
@@ -216,7 +235,7 @@ const TOOL_DEFS = {
       const contract = await db.one('SELECT flags FROM contracts WHERE id = $1 AND user_id = $2', [args.contract_id, userId]);
       if (!contract) return { success: false, error: 'Contract not found' };
       const flags = [...(contract.flags || []), { clause: args.clause_title, severity: args.severity, explanation: args.explanation }];
-      await db.query('UPDATE contracts SET flags = $1 WHERE id = $2', [JSON.stringify(flags), args.contract_id]);
+      await db.query('UPDATE contracts SET flags = $1 WHERE id = $2 AND user_id = $3', [JSON.stringify(flags), args.contract_id, userId]);
       return { success: true, data: { flagged: args.clause_title, severity: args.severity } };
     }
   },
@@ -234,7 +253,7 @@ const TOOL_DEFS = {
       const [project, contract, events] = await Promise.all([
         db.one('SELECT scope_summary, budget_cents FROM projects WHERE id = $1 AND user_id = $2', [args.project_id, userId]),
         db.one('SELECT content FROM contracts WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1', [args.project_id, userId]),
-        db.many('SELECT event_type, description, estimated_hours, estimated_cost_cents, created_at FROM scope_events WHERE project_id = $1 ORDER BY created_at DESC LIMIT 10', [args.project_id])
+        db.many('SELECT event_type, description, estimated_hours, estimated_cost_cents, created_at FROM scope_events WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 10', [args.project_id, userId])
       ]);
       return { success: true, data: { scope_summary: project?.scope_summary, budget_cents: project?.budget_cents, contract_scope: contract?.content?.scope, past_events: events } };
     }

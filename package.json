@@ -5,12 +5,12 @@
   "description": "AI-powered back-office platform for freelancers and agencies",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "node --watch server/index.js",
+    "dev:server": "node --env-file=.env --watch server/index.js",
     "dev:client": "vite",
     "build": "vite build",
     "start": "node server/index.js",
-    "db:migrate": "node server/migrate.js",
-    "db:seed": "node server/seed.js",
+    "db:migrate": "node --env-file=.env server/migrate.js",
+    "db:seed": "node --env-file=.env server/seed.js",
     "postinstall": "npm run build"
   },
   "dependencies": {

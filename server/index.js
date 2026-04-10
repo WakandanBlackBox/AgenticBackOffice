@@ -21,7 +21,7 @@ app.use(express.json({ limit: '1mb' }));
 
 // Rate limiters
 const authLimiter = rateLimit({ windowMs: 60_000, max: 5, message: { error: 'Too many attempts' } });
-const agentLimiter = rateLimit({ windowMs: 60_000, max: 10, message: { error: 'Agent rate limit reached' } });
+const agentLimiter = rateLimit({ windowMs: 60_000, max: process.env.NODE_ENV === 'production' ? 10 : 50, message: { error: 'Agent rate limit reached' } });
 const generalLimiter = rateLimit({ windowMs: 60_000, max: 30, message: { error: 'Rate limit reached' } });
 
 // Health check

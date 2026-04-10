@@ -78,6 +78,12 @@ router.patch('/invoices/:id', async (req, res) => {
   res.json({ invoice: row });
 });
 
+router.delete('/invoices/:id', async (req, res) => {
+  const result = await db.query('DELETE FROM invoices WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ deleted: true });
+});
+
 // === CONTRACTS ===
 router.get('/contracts', async (req, res) => {
   const { project_id } = req.query;
@@ -107,6 +113,12 @@ router.patch('/contracts/:id', async (req, res) => {
   res.json({ contract: row });
 });
 
+router.delete('/contracts/:id', async (req, res) => {
+  const result = await db.query('DELETE FROM contracts WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ deleted: true });
+});
+
 // === SCOPE EVENTS ===
 router.get('/scope-events', async (req, res) => {
   const { project_id } = req.query;
@@ -119,6 +131,12 @@ router.get('/scope-events', async (req, res) => {
   res.json({ scope_events: events });
 });
 
+router.delete('/scope-events/:id', async (req, res) => {
+  const result = await db.query('DELETE FROM scope_events WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' });
+  res.json({ deleted: true });
+});
+
 // === AGENT LOGS ===
 router.get('/agent-logs', async (req, res) => {
   const { agent, project_id, limit } = req.query;
@@ -127,7 +145,7 @@ router.get('/agent-logs', async (req, res) => {
   if (agent) { sql += ` AND agent = $${params.length + 1}`; params.push(agent); }
   if (project_id) { sql += ` AND project_id = $${params.length + 1}`; params.push(project_id); }
   sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
-  params.push(parseInt(limit) || 50);
+  params.push(Math.min(parseInt(limit) || 50, 100));
   res.json({ logs: await db.many(sql, params) });
 });
 

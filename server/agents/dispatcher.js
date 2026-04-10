@@ -1,28 +1,53 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { AGENTS, AGENT_LIST } from './agent-config.js';
 import { getToolDefs, executeTool } from './tools.js';
+import { setRunAgent, DELEGATE_TOOL_DEF, executeDelegation } from './delegate.js';
 import db from '../db.js';
 
+if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY environment variable is required');
 const client = new Anthropic();
 
 // Route a natural language query to the best agent by intent score
 export function routeToAgent(query) {
   const q = query.toLowerCase();
-  let best = { agent: AGENTS.insight, score: 0 }; // default fallback
+  let best = { agent: null, score: 0 };
 
-  for (const agent of AGENT_LIST) {
+  // Score each specialist agent by keyword match
+  const scored = AGENT_LIST.map((agent) => {
     const score = agent.intentPatterns.reduce((acc, p) => acc + (q.includes(p) ? 1 : 0), 0);
     if (score > best.score) best = { agent, score };
-  }
-  return best.agent;
+    return { agent, score };
+  });
+
+  // Multi-domain detection: 2+ agents match -> Chief orchestrates
+  const matchedAgents = scored.filter((s) => s.score > 0);
+  if (matchedAgents.length >= 2) return AGENTS.chief;
+
+  // Clear single-agent match -> direct routing (fast path)
+  if (best.agent && best.score > 0) return best.agent;
+
+  // Ambiguous -> Chief decides
+  return AGENTS.chief;
 }
 
+const MAX_DELEGATION_DEPTH = 2;
+
 // Run a single agent with streaming — yields SSE chunks
-export async function* runAgent(agentId, userId, userMessage, projectId) {
+export async function* runAgent(agentId, userId, userMessage, projectId, { depth = 0 } = {}) {
+  if (depth >= MAX_DELEGATION_DEPTH) {
+    throw new Error(`Max delegation depth (${MAX_DELEGATION_DEPTH}) exceeded.`);
+  }
+
   const agent = AGENTS[agentId];
   if (!agent) throw new Error(`Unknown agent: ${agentId}`);
 
-  const tools = getToolDefs(agent.tools);
+  // Build tools array — inject delegate_to_agent def if agent uses it
+  const regularTools = agent.tools.filter((t) => t !== 'delegate_to_agent');
+  const tools = getToolDefs(regularTools);
+  if (agent.tools.includes('delegate_to_agent')) {
+    tools.push({ name: DELEGATE_TOOL_DEF.name, description: DELEGATE_TOOL_DEF.description, input_schema: DELEGATE_TOOL_DEF.input_schema });
+  }
+
   const messages = [{ role: 'user', content: userMessage }];
   const startTime = Date.now();
   let totalInputTokens = 0;
@@ -30,7 +55,12 @@ export async function* runAgent(agentId, userId, userMessage, projectId) {
 
   yield { type: 'agent_start', agent: agent.id, name: agent.name };
 
-  for (let iteration = 0; iteration < 10; iteration++) {
+  const maxIterations = agentId === 'chief' ? 12 : 5;
+  const maxTotalTokens = agentId === 'chief' ? 30000 : 15000;
+  for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // Bail if we've used too many tokens (prevents runaway loops)
+    if (totalInputTokens + totalOutputTokens > maxTotalTokens) break;
+
     const response = await client.messages.create({
       model: agent.model,
       max_tokens: agent.maxTokens,
@@ -64,7 +94,18 @@ export async function* runAgent(agentId, userId, userMessage, projectId) {
 
     for (const toolUse of toolUseBlocks) {
       yield { type: 'tool_call', tool: toolUse.name, input: toolUse.input };
-      const result = await executeTool(toolUse.name, toolUse.input, userId);
+
+      let result;
+      if (toolUse.name === 'delegate_to_agent') {
+        // Collect yielded events from sub-agent via a buffer, then yield them
+        const events = [];
+        const collectEvent = (evt) => events.push(evt);
+        result = await executeDelegation(toolUse.input, userId, agentId, collectEvent, depth, projectId);
+        for (const evt of events) yield evt;
+      } else {
+        result = await executeTool(toolUse.name, toolUse.input, userId);
+      }
+
       yield { type: 'tool_result', tool: toolUse.name, result };
       toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: JSON.stringify(result) });
     }
@@ -86,6 +127,9 @@ export async function* runAgent(agentId, userId, userMessage, projectId) {
 
   yield { type: 'agent_complete', agent: agent.id, duration_ms: durationMs, tokens: { input: totalInputTokens, output: totalOutputTokens } };
 }
+
+// Wire up late binding for delegation
+setRunAgent(runAgent);
 
 // Workflow: run multiple agents with dependencies
 export async function* runWorkflow(steps, userId) {
