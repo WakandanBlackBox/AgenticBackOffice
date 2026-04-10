@@ -71,3 +71,32 @@ export const chatSchema = z.object({
   message: z.string().min(1).max(5000),
   project_id: z.string().uuid().optional()
 });
+
+// Milestones
+export const createMilestoneSchema = z.object({
+  project_id: z.string().uuid(),
+  title: z.string().min(1),
+  description: z.string().optional(),
+  amount_cents: z.number().int().nonnegative().optional(),
+  approval_type: z.enum(['auto', 'approval_needed']).default('approval_needed'),
+  position: z.number().int().nonnegative()
+});
+
+export const updateMilestoneSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  amount_cents: z.number().int().nonnegative().optional(),
+  approval_type: z.enum(['auto', 'approval_needed']).optional(),
+  position: z.number().int().nonnegative().optional()
+});
+
+export const rejectMilestoneSchema = z.object({
+  reason: z.string().min(1).max(500)
+});
+
+// Share tokens
+export const createShareTokenSchema = z.object({
+  project_id: z.string().uuid(),
+  client_name: z.string().optional(),
+  expires_days: z.number().int().positive().default(30)
+});

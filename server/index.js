@@ -10,6 +10,8 @@ import projectRoutes from './routes/projects.js';
 import agentRoutes from './routes/agents.js';
 import documentRoutes from './routes/documents.js';
 import dashboardRoutes from './routes/dashboard.js';
+import milestoneRoutes from './routes/milestones.js';
+import clientPortalRoutes from './routes/client-portal.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -34,6 +36,8 @@ app.use('/api/clients', generalLimiter, clientRoutes);
 app.use('/api/projects', generalLimiter, projectRoutes);
 app.use('/api/documents', generalLimiter, documentRoutes);
 app.use('/api/dashboard', generalLimiter, dashboardRoutes);
+app.use('/api/milestones', generalLimiter, milestoneRoutes);
+app.use('/api/portal', generalLimiter, clientPortalRoutes);
 
 // Serve React in production
 const distPath = join(__dirname, '..', 'dist');

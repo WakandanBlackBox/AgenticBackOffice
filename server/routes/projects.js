@@ -30,14 +30,15 @@ router.get('/:id', async (req, res) => {
   );
   if (!project) return res.status(404).json({ error: 'Project not found' });
 
-  const [proposals, invoices, contracts, scopeEvents] = await Promise.all([
+  const [proposals, invoices, contracts, scopeEvents, milestones] = await Promise.all([
     db.many('SELECT id, content, status, created_at FROM proposals WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC', [req.params.id, req.user.id]),
     db.many('SELECT id, line_items, total_cents, status, due_date, created_at FROM invoices WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC', [req.params.id, req.user.id]),
     db.many('SELECT id, content, flags, status, created_at FROM contracts WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC', [req.params.id, req.user.id]),
-    db.many('SELECT id, event_type, description, estimated_cost_cents, created_at FROM scope_events WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 20', [req.params.id, req.user.id])
+    db.many('SELECT id, event_type, description, estimated_cost_cents, created_at FROM scope_events WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 20', [req.params.id, req.user.id]),
+    db.many('SELECT id, title, description, amount_cents, position, approval_type, status, completed_at, approved_at, rejection_reason, created_at FROM milestones WHERE project_id = $1 AND user_id = $2 ORDER BY position ASC', [req.params.id, req.user.id])
   ]);
 
-  res.json({ project, proposals, invoices, contracts, scope_events: scopeEvents });
+  res.json({ project, proposals, invoices, contracts, scope_events: scopeEvents, milestones });
 });
 
 router.post('/', validate(createProjectSchema), async (req, res) => {
