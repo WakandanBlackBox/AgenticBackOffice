@@ -79,7 +79,7 @@ CREATE TABLE scope_events (
 CREATE TABLE agent_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  agent TEXT NOT NULL CHECK (agent IN ('proposal','invoice','contract','scope_guardian','insight')),
+  agent TEXT NOT NULL CHECK (agent IN ('proposal','invoice','contract','scope_guardian','insight','chief')),
   project_id UUID REFERENCES projects(id),
   input JSONB,
   output JSONB,
