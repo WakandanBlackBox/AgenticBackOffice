@@ -41,12 +41,19 @@ export async function executeDelegation(args, userId, parentAgentId, yieldEvent,
     return { success: false, error: 'Cannot delegate to the chief agent.' };
   }
 
+  // Inject project_id into the message so the sub-agent always has it,
+  // even if Chief's delegation message is short/vague
+  const resolvedProjectId = project_id || fallbackProjectId || null;
+  const enrichedMessage = resolvedProjectId && !message.includes(resolvedProjectId)
+    ? `[project_id: ${resolvedProjectId}]\n\n${message}`
+    : message;
+
   const textParts = [];
 
   try {
     yieldEvent({ type: 'delegation_start', agent: agent_id, parent: parentAgentId });
 
-    const subGen = _runAgent(agent_id, userId, message, project_id || fallbackProjectId || null, { depth: depth + 1 });
+    const subGen = _runAgent(agent_id, userId, enrichedMessage, resolvedProjectId, { depth: depth + 1 });
     for await (const chunk of subGen) {
       // Forward sub-agent events to client with delegation context
       yieldEvent({ ...chunk, delegated_by: parentAgentId });
@@ -62,9 +69,9 @@ export async function executeDelegation(args, userId, parentAgentId, yieldEvent,
 
   // Truncate response to avoid filling the Chief's context window
   const fullResponse = textParts.join('');
-  const maxChars = 3000;
+  const maxChars = 1500;
   const response = fullResponse.length > maxChars
-    ? fullResponse.slice(0, maxChars) + '\n\n[Response truncated -- full content was streamed to user and saved to database]'
+    ? fullResponse.slice(0, maxChars) + '\n\n[Truncated -- full content streamed to user and saved to DB]'
     : fullResponse;
 
   return {

@@ -111,6 +111,7 @@ const streamChat = async (message, projectId, dispatch, abortSignal) => {
             case 'delegation_start': dispatch({ type: 'CHAT_DELEGATION_START', agent: data.agent, parent: data.parent }); break;
             case 'delegation_complete': dispatch({ type: 'CHAT_DELEGATION_COMPLETE', agent: data.agent, parent: data.parent }); break;
             case 'agent_complete': dispatch({ type: 'CHAT_AGENT_COMPLETE', agent: data.agent, durationMs: data.duration_ms, tokens: data.tokens }); break;
+            case 'budget_exceeded': dispatch({ type: 'CHAT_STREAM_ERROR', error: data.reason }); break;
             case 'error': dispatch({ type: 'CHAT_STREAM_ERROR', error: data.error }); break;
             case 'done': break; // handled by reader completing
           }

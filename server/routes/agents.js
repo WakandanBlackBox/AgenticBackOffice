@@ -4,14 +4,33 @@ import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { generateProposalSchema, generateInvoiceSchema, generateContractSchema, analyzeScopeSchema, generateInsightSchema, chatSchema } from '../schemas/index.js';
 import { runAgent, runWorkflow, routeToAgent, onboardingWorkflow, scopeCheckWorkflow } from '../agents/dispatcher.js';
+import { checkBudget, getDailyUsage } from '../agents/token-budget.js';
 
 const classifier = new Anthropic();
 
+// Scope creep keywords -- skip classifier if none match (saves an API call)
+const SCOPE_KEYWORDS = ['also', 'add', 'extra', 'another', 'more', 'change', 'tweak', 'adjust', 'include', 'want', 'need', 'can you', 'could you', 'new feature', 'quick', 'small', 'one more'];
+
+function looksLikeScopeCreep(message) {
+  const lower = message.toLowerCase();
+  return SCOPE_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
+// Cached system prompt for classifier -- reuse across calls within cache TTL
+const CLASSIFIER_SYSTEM = [
+  { type: 'text', text: 'Detect scope creep. Respond ONLY with raw JSON: {"is_scope_creep":true/false,"reason":"brief"}. Scope creep = CLIENT requesting work beyond original agreement.', cache_control: { type: 'ephemeral' } }
+];
+
 async function detectScopeCreep(message) {
+  // Skip classifier for short messages or those without scope-creep signals
+  if (message.length < 20 || !looksLikeScopeCreep(message)) {
+    return { isScopeCreep: false, reason: '' };
+  }
+
   const res = await classifier.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 80,
-    system: 'You detect scope creep in freelancer messages. Respond ONLY with raw JSON, no markdown fences: {"is_scope_creep":true/false,"reason":"brief reason"}. Scope creep = a CLIENT requesting work, features, or changes beyond what was originally agreed.',
+    max_tokens: 50,
+    system: CLASSIFIER_SYSTEM,
     messages: [{ role: 'user', content: message }]
   });
   const raw = (res.content[0]?.text || '{}').replace(/```json\s*|```\s*/g, '').trim();
@@ -35,9 +54,19 @@ function sendEvent(res, data) {
   res.write(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-// Stream a single agent run over SSE
+// Stream a single agent run over SSE (with budget gate)
 async function streamAgent(res, agentId, userId, message, projectId) {
   setupSSE(res);
+
+  // Check daily token budget before running
+  const budget = await checkBudget(userId, agentId);
+  if (!budget.allowed) {
+    sendEvent(res, { type: 'budget_exceeded', usage: budget.usage, reason: budget.reason });
+    sendEvent(res, { type: 'done' });
+    res.end();
+    return;
+  }
+
   try {
     for await (const chunk of runAgent(agentId, userId, message, projectId)) {
       sendEvent(res, chunk);
@@ -84,11 +113,27 @@ router.post('/insight/generate', validate(generateInsightSchema), async (req, re
   await streamAgent(res, 'insight', req.user.id, message, null);
 });
 
+// Token usage endpoint -- lets frontend show budget status
+router.get('/usage', async (req, res) => {
+  const usage = await getDailyUsage(req.user.id);
+  res.json(usage);
+});
+
 // Smart chat - auto-route to best agent (with proactive scope detection)
 router.post('/chat', validate(chatSchema), async (req, res) => {
   const { message, project_id } = req.validated;
 
   setupSSE(res);
+
+  // Check daily token budget
+  const agent = routeToAgent(message);
+  const budget = await checkBudget(req.user.id, agent.id);
+  if (!budget.allowed) {
+    sendEvent(res, { type: 'budget_exceeded', usage: budget.usage, reason: budget.reason });
+    sendEvent(res, { type: 'done' });
+    res.end();
+    return;
+  }
 
   // Proactive scope creep detection when a project is selected
   if (project_id) {
@@ -105,8 +150,7 @@ router.post('/chat', validate(chatSchema), async (req, res) => {
     } catch { /* classifier failed, continue normally */ }
   }
 
-  // Normal agent routing
-  const agent = routeToAgent(message);
+  // Normal agent routing (agent already resolved above for budget check)
   const enrichedMessage = project_id
     ? `[Context: The user has selected project_id="${project_id}". Use this project_id when delegating to agents.]\n\n${message}`
     : message;
@@ -127,6 +171,15 @@ router.post('/workflow/onboard', validate(generateProposalSchema), async (req, r
   const { project_id, instructions } = req.validated;
   setupSSE(res);
 
+  // Workflows are expensive (3 agents) -- budget check with chief multiplier
+  const budget = await checkBudget(req.user.id, 'chief');
+  if (!budget.allowed) {
+    sendEvent(res, { type: 'budget_exceeded', usage: budget.usage, reason: budget.reason });
+    sendEvent(res, { type: 'done' });
+    res.end();
+    return;
+  }
+
   try {
     const steps = onboardingWorkflow(project_id, instructions);
     for await (const chunk of runWorkflow(steps, req.user.id)) {
@@ -143,6 +196,14 @@ router.post('/workflow/onboard', validate(generateProposalSchema), async (req, r
 router.post('/workflow/scope-check', validate(analyzeScopeSchema), async (req, res) => {
   const { project_id, request_description } = req.validated;
   setupSSE(res);
+
+  const budget = await checkBudget(req.user.id, 'scope_guardian');
+  if (!budget.allowed) {
+    sendEvent(res, { type: 'budget_exceeded', usage: budget.usage, reason: budget.reason });
+    sendEvent(res, { type: 'done' });
+    res.end();
+    return;
+  }
 
   try {
     const steps = scopeCheckWorkflow(project_id, request_description);

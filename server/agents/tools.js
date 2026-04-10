@@ -1,6 +1,13 @@
 import db from '../db.js';
 
-// Tool definitions for Claude tool_use — each returns { success, data } or { success: false, error }
+// Tool definitions for Claude tool_use -- each returns { success, data } or { success: false, error }
+
+// Cap serialized tool result size to prevent context bloat
+const MAX_RESULT_CHARS = 2000;
+export function capResultSize(resultJson) {
+  if (resultJson.length <= MAX_RESULT_CHARS) return resultJson;
+  return resultJson.slice(0, MAX_RESULT_CHARS) + '...[truncated]';
+}
 
 const TOOL_DEFS = {
   // === SHARED CONTEXT ===
@@ -38,7 +45,7 @@ const TOOL_DEFS = {
         return { success: false, error: `"${args.client_id}" is not a valid UUID. Use the client_id from get_project_context (e.g. "7fef35bc-ed7c-45c3-89a2-14b33fb86483").` };
       }
       const projects = await db.many(
-        'SELECT id, name, status, budget_cents, created_at FROM projects WHERE client_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 10',
+        'SELECT id, name, status, budget_cents, created_at FROM projects WHERE client_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 5',
         [args.client_id, userId]
       );
       return { success: true, data: { projects, count: projects.length } };
@@ -55,8 +62,12 @@ const TOOL_DEFS = {
     },
     fn: async (args, userId) => {
       const proposals = await db.many(
-        'SELECT id, content, status, created_at FROM proposals WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2',
-        [userId, args.limit || 5]
+        `SELECT id, status, created_at,
+           content->>'title' AS title,
+           content->>'pricing_total_cents' AS pricing_total_cents,
+           content->>'timeline' AS timeline
+         FROM proposals WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+        [userId, Math.min(args.limit || 3, 3)]
       );
       return { success: true, data: proposals };
     }
@@ -202,7 +213,7 @@ const TOOL_DEFS = {
       type: 'object',
       properties: {
         project_id: { type: 'string', description: 'Project UUID' },
-        content: { description: 'Contract content object with clauses. Must be a non-null object.' },
+        content: { type: 'object', description: 'Contract content with keys: scope, payment_terms, revision_policy, ip_ownership, termination, timeline. Each value is a string with the clause text.' },
         flags: { type: 'array', description: 'Flagged clauses with severity', items: { type: 'object' } }
       },
       required: ['project_id', 'content']
@@ -253,7 +264,7 @@ const TOOL_DEFS = {
       const [project, contract, events] = await Promise.all([
         db.one('SELECT scope_summary, budget_cents FROM projects WHERE id = $1 AND user_id = $2', [args.project_id, userId]),
         db.one('SELECT content FROM contracts WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 1', [args.project_id, userId]),
-        db.many('SELECT event_type, description, estimated_hours, estimated_cost_cents, created_at FROM scope_events WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 10', [args.project_id, userId])
+        db.many('SELECT event_type, description, estimated_hours, estimated_cost_cents, created_at FROM scope_events WHERE project_id = $1 AND user_id = $2 ORDER BY created_at DESC LIMIT 5', [args.project_id, userId])
       ]);
       return { success: true, data: { scope_summary: project?.scope_summary, budget_cents: project?.budget_cents, contract_scope: contract?.content?.scope, past_events: events } };
     }
