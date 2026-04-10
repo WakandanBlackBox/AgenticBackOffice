@@ -140,13 +140,23 @@ router.delete('/scope-events/:id', async (req, res) => {
 // === AGENT LOGS ===
 router.get('/agent-logs', async (req, res) => {
   const { agent, project_id, limit } = req.query;
-  let sql = 'SELECT id, agent, project_id, model, input_tokens, output_tokens, duration_ms, created_at FROM agent_logs WHERE user_id = $1';
+  let sql = `SELECT al.id, al.agent, al.project_id, p.name AS project_name, al.model, al.input_tokens, al.output_tokens, al.duration_ms, al.created_at
+    FROM agent_logs al LEFT JOIN projects p ON al.project_id = p.id
+    WHERE al.user_id = $1`;
   const params = [req.user.id];
-  if (agent) { sql += ` AND agent = $${params.length + 1}`; params.push(agent); }
-  if (project_id) { sql += ` AND project_id = $${params.length + 1}`; params.push(project_id); }
-  sql += ` ORDER BY created_at DESC LIMIT $${params.length + 1}`;
+  if (agent) { sql += ` AND al.agent = $${params.length + 1}`; params.push(agent); }
+  if (project_id) { sql += ` AND al.project_id = $${params.length + 1}`; params.push(project_id); }
+  sql += ` ORDER BY al.created_at DESC LIMIT $${params.length + 1}`;
   params.push(Math.min(parseInt(limit) || 50, 100));
-  res.json({ logs: await db.many(sql, params) });
+  const logs = await db.many(sql, params);
+
+  // Compute summary stats
+  const totalTokens = logs.reduce((s, l) => s + (l.input_tokens || 0) + (l.output_tokens || 0), 0);
+  const totalDuration = logs.reduce((s, l) => s + (l.duration_ms || 0), 0);
+  const agentCounts = {};
+  for (const l of logs) { agentCounts[l.agent] = (agentCounts[l.agent] || 0) + 1; }
+
+  res.json({ logs, summary: { total_logs: logs.length, total_tokens: totalTokens, total_duration_ms: totalDuration, agent_counts: agentCounts } });
 });
 
 export default router;

@@ -352,6 +352,7 @@ function Sidebar({ state, dispatch }) {
     { id: 'chat', label: 'AI Chat', icon: '\u25C6', color: C.primary },
     { id: 'projects', label: 'Projects', icon: '\u25B6', color: C.proposal },
     { id: 'clients', label: 'Clients', icon: '\u25CF', color: C.invoice },
+    { id: 'activity', label: 'Activity Log', icon: '\u25E6', color: C.insight },
   ];
 
   return (
@@ -1111,6 +1112,138 @@ function ClientsView({ state, dispatch }) {
   );
 }
 
+// ─── Activity Log ─────────────────────────────────────────────
+function ActivityLogView({ state, dispatch }) {
+  const [logs, setLogs] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [filter, setFilter] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    const params = filter ? `?agent=${filter}` : '';
+    api(`/documents/agent-logs${params}`).then((data) => {
+      setLogs(data.logs || []);
+      setSummary(data.summary || null);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [filter]);
+
+  const agents = ['chief', 'proposal', 'invoice', 'contract', 'scope_guardian', 'insight'];
+
+  // Estimate cost (Haiku: ~$0.25/1M input, ~$1.25/1M output)
+  const estimateCost = (log) => {
+    const inputCost = (log.input_tokens || 0) * 0.00000025;
+    const outputCost = (log.output_tokens || 0) * 0.00000125;
+    return (inputCost + outputCost).toFixed(4);
+  };
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Activity Log</h1>
+        <button onClick={() => {
+          const exportData = { exported_at: new Date().toISOString(), summary, logs: logs.map((l) => ({ ...l, est_cost: estimateCost(l) })) };
+          downloadJSON(exportData, `activity-log-${new Date().toISOString().slice(0, 10)}.json`);
+        }} style={S.btn} disabled={logs.length === 0}>Export Logs</button>
+      </div>
+
+      {/* Summary cards */}
+      {summary && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 24 }}>
+          <div style={{ ...S.card, borderTop: `3px solid ${C.accent}`, padding: 16 }}>
+            <p style={{ fontSize: 11, color: C.textMuted }}>Total Calls</p>
+            <p style={{ fontSize: 24, fontWeight: 700 }}>{summary.total_logs}</p>
+          </div>
+          <div style={{ ...S.card, borderTop: `3px solid ${C.primary}`, padding: 16 }}>
+            <p style={{ fontSize: 11, color: C.textMuted }}>Total Tokens</p>
+            <p style={{ fontSize: 24, fontWeight: 700 }}>{(summary.total_tokens || 0).toLocaleString()}</p>
+          </div>
+          <div style={{ ...S.card, borderTop: `3px solid ${C.success}`, padding: 16 }}>
+            <p style={{ fontSize: 11, color: C.textMuted }}>Total Time</p>
+            <p style={{ fontSize: 24, fontWeight: 700 }}>{((summary.total_duration_ms || 0) / 1000).toFixed(1)}s</p>
+          </div>
+          <div style={{ ...S.card, borderTop: `3px solid ${C.warning}`, padding: 16 }}>
+            <p style={{ fontSize: 11, color: C.textMuted }}>Est. Cost</p>
+            <p style={{ fontSize: 24, fontWeight: 700 }}>${logs.reduce((s, l) => s + parseFloat(estimateCost(l)), 0).toFixed(2)}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Agent breakdown */}
+      {summary?.agent_counts && (
+        <div style={{ ...S.card, marginBottom: 20, padding: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Agent Usage</p>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {agents.filter((a) => summary.agent_counts[a]).map((a) => (
+              <button key={a} onClick={() => setFilter(filter === a ? '' : a)}
+                style={{ ...S.badge(AGENT_COLORS[a] || C.textDim), cursor: 'pointer', border: filter === a ? `2px solid ${AGENT_COLORS[a]}` : '2px solid transparent', padding: '4px 12px' }}>
+                {AGENT_NAMES[a] || a}: {summary.agent_counts[a]}
+              </button>
+            ))}
+            {filter && <button onClick={() => setFilter('')} style={{ ...S.btnOutline, padding: '4px 10px', fontSize: 11 }}>Clear filter</button>}
+          </div>
+        </div>
+      )}
+
+      {/* Log entries */}
+      {loading && <p style={{ color: C.textMuted }}>Loading...</p>}
+      {logs.map((log) => (
+        <ActivityLogEntry key={log.id} log={log} estimateCost={estimateCost} />
+      ))}
+      {!loading && logs.length === 0 && <p style={{ color: C.textDim, textAlign: 'center', padding: 40 }}>No agent activity yet.</p>}
+    </div>
+  );
+}
+
+function ActivityLogEntry({ log, estimateCost }) {
+  const [open, setOpen] = useState(false);
+  const color = AGENT_COLORS[log.agent] || C.textDim;
+  const totalTokens = (log.input_tokens || 0) + (log.output_tokens || 0);
+
+  return (
+    <div className="card-hover" style={{ ...S.card, marginBottom: 10, padding: 14, cursor: 'pointer' }} onClick={() => setOpen(!open)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ color: C.textDim, fontSize: 11 }}>{open ? '\u25BC' : '\u25B6'}</span>
+        <span style={S.badge(color)}>{AGENT_NAMES[log.agent] || log.agent}</span>
+        {log.project_name && <span style={{ fontSize: 12, color: C.textMuted }}>{log.project_name}</span>}
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: C.textDim }}>
+          <span>{(log.duration_ms / 1000).toFixed(1)}s</span>
+          <span>{totalTokens.toLocaleString()} tok</span>
+          <span>${estimateCost(log)}</span>
+          <span>{timeAgo(log.created_at)}</span>
+        </span>
+      </div>
+      {open && (
+        <div className="fade-in" style={{ marginTop: 12, background: C.bg, borderRadius: 10, padding: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div>
+              <p style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>Input Tokens</p>
+              <p style={{ fontSize: 16, fontWeight: 600 }}>{(log.input_tokens || 0).toLocaleString()}</p>
+              <div style={{ height: 4, background: C.border, borderRadius: 2, marginTop: 4 }}>
+                <div style={{ height: 4, background: C.primary, borderRadius: 2, width: `${Math.min(100, (log.input_tokens / 20000) * 100)}%` }} />
+              </div>
+            </div>
+            <div>
+              <p style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>Output Tokens</p>
+              <p style={{ fontSize: 16, fontWeight: 600 }}>{(log.output_tokens || 0).toLocaleString()}</p>
+              <div style={{ height: 4, background: C.border, borderRadius: 2, marginTop: 4 }}>
+                <div style={{ height: 4, background: C.accent, borderRadius: 2, width: `${Math.min(100, (log.output_tokens / 5000) * 100)}%` }} />
+              </div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: C.textMuted }}>
+            <span>Model: <strong style={{ color: C.text }}>{log.model}</strong></span>
+            <span>Duration: <strong style={{ color: C.text }}>{(log.duration_ms / 1000).toFixed(1)}s</strong></span>
+            <span>Cost: <strong style={{ color: C.success }}>${estimateCost(log)}</strong></span>
+            <span>Time: <strong style={{ color: C.text }}>{new Date(log.created_at).toLocaleString()}</strong></span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
@@ -1145,6 +1278,7 @@ export default function App() {
     projects: ProjectsView,
     project_detail: ProjectDetail,
     clients: ClientsView,
+    activity: ActivityLogView,
   };
   const View = viewMap[state.view] || DashboardView;
 
