@@ -59,7 +59,7 @@ npm run dev
 ## Business Case
 
 - **Market:** $40.5B invoice processing market, 73M US freelancers, zero agentic competitors
-- **Moat:** Scope Guardian behavioral intervention (ported from production ADHD intervention system)
+- **Moat:** Scope Guardian behavioral intervention
 - **Unit Economics:** ~$0.013/interaction, 78-82% gross margin at $55 ARPU
 
 ---
