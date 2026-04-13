@@ -26,6 +26,12 @@ const TOOL_DEFS = {
          WHERE p.id = $1 AND p.user_id = $2`, [args.project_id, userId]
       );
       if (!project) return { success: false, error: 'Project not found' };
+      const milestones = await db.many(
+        `SELECT title, description, amount_cents, status, approval_type, position
+         FROM milestones WHERE project_id = $1 AND user_id = $2
+         ORDER BY position LIMIT 10`, [args.project_id, userId]
+      );
+      project.milestones = milestones;
       return { success: true, data: project };
     }
   },
