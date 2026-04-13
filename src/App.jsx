@@ -1,13 +1,27 @@
 import React, { useReducer, useEffect, useRef, useState, useCallback } from 'react';
+import LandingView from './LandingView.jsx';
+import { Button } from '@/components/ui/button';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
+import {
+  LayoutDashboard, FolderOpen, Users, Kanban, MessageSquare,
+  BookOpen, Activity, LogOut, Search, Bell, TrendingUp, DollarSign,
+  Clock, AlertTriangle, ChevronRight, UserCheck, Zap, Cpu, Timer, Plus,
+  Mail, Building2, ChevronDown, Check, X,
+} from 'lucide-react';
 
 // ─── Colors ────────────────────────────────────────────────────────
 const C = {
-  bg: '#0F1117', surface: '#1A1D27', surfaceHover: '#242836', border: '#2E3346',
-  primary: '#6C5CE7', primaryHover: '#7F71EF', accent: '#00D2D3',
-  success: '#00B894', warning: '#FDCB6E', danger: '#E17055',
-  text: '#F1F2F6', textMuted: '#8B92A8', textDim: '#5A6178',
-  proposal: '#74B9FF', invoice: '#55EFC4', contract: '#FAB1A0',
-  scope: '#FFEAA7', insight: '#A29BFE', chief: '#6C5CE7',
+  bg: '#060A14', surface: '#0B1120', surfaceHover: '#0F172A', border: '#1E293B',
+  primary: '#2563EB', primaryHover: '#1D4ED8', accent: '#3B82F6',
+  success: '#34D399', warning: '#FBBF24', danger: '#F87171',
+  text: '#E2E8F0', textMuted: '#94A3B8', textDim: '#475569',
+  proposal: '#60A5FA', invoice: '#34D399', contract: '#F472B6',
+  scope: '#FBBF24', insight: '#A78BFA', chief: '#2563EB',
 };
 
 const AGENT_NAMES = {
@@ -21,13 +35,13 @@ const AGENT_COLORS = {
 
 // ─── Style helpers ─────────────────────────────────────────────────
 const S = {
-  card: { background: C.surface, borderRadius: 14, padding: 22, border: `1px solid ${C.border}`, transition: 'border-color 0.2s, box-shadow 0.2s' },
-  cardHover: { borderColor: C.primary + '44', boxShadow: `0 0 20px ${C.primary}11` },
-  input: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 16px', color: C.text, width: '100%', outline: 'none', fontSize: 14, transition: 'border-color 0.2s, box-shadow 0.2s' },
-  btn: { background: C.primary, color: C.text, border: 'none', borderRadius: 10, padding: '10px 22px', cursor: 'pointer', fontWeight: 600, fontSize: 14, transition: 'all 0.2s', ':hover': { background: C.primaryHover } },
-  btnOutline: { background: 'transparent', color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontSize: 13, transition: 'all 0.2s' },
-  btnDanger: { background: C.danger, color: C.text, border: 'none', borderRadius: 10, padding: '8px 16px', cursor: 'pointer', fontSize: 13 },
-  badge: (color) => ({ display: 'inline-flex', alignItems: 'center', padding: '3px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, background: color + '18', color, letterSpacing: '0.02em' }),
+  card: { background: C.surface, borderRadius: 16, padding: 28, border: `1px solid ${C.border}`, boxShadow: '0 10px 40px rgba(0,0,0,0.5)', transition: 'border-color 0.2s, box-shadow 0.2s' },
+  cardHover: { borderColor: 'rgba(37,99,235,0.4)', boxShadow: '0 0 32px rgba(37,99,235,0.14)' },
+  input: { background: C.bg, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', color: C.text, width: '100%', outline: 'none', fontSize: 14, transition: 'border-color 0.2s, box-shadow 0.2s' },
+  btn: { background: C.primary, color: '#fff', border: 'none', borderRadius: 10, padding: '11px 26px', cursor: 'pointer', fontWeight: 700, fontSize: 14, transition: 'all 0.2s', boxShadow: '0 0 40px rgba(37,99,235,0.25)', letterSpacing: '0.01em' },
+  btnOutline: { background: 'transparent', color: '#60A5FA', border: '1px solid rgba(37,99,235,0.5)', borderRadius: 10, padding: '9px 18px', cursor: 'pointer', fontSize: 13, transition: 'all 0.2s', fontWeight: 500 },
+  btnDanger: { background: C.danger, color: '#fff', border: 'none', borderRadius: 10, padding: '9px 18px', cursor: 'pointer', fontSize: 13, fontWeight: 600 },
+  badge: (color) => ({ display: 'inline-flex', alignItems: 'center', padding: '4px 14px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: color + '18', color, letterSpacing: '0.04em', textTransform: 'uppercase' }),
 };
 
 // ─── Utilities ─────────────────────────────────────────────────────
@@ -255,7 +269,7 @@ function InlineFormat({ text }) {
   while ((match = regex.exec(remaining)) !== null) {
     if (match.index > lastIdx) parts.push(<span key={i++}>{remaining.slice(lastIdx, match.index)}</span>);
     if (match[2]) parts.push(<strong key={i++}>{match[2]}</strong>);
-    else if (match[3]) parts.push(<code key={i++} style={{ background: '#242836', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{match[3]}</code>);
+    else if (match[3]) parts.push(<code key={i++} style={{ background: '#0F172A', padding: '2px 6px', borderRadius: 4, fontSize: 13 }}>{match[3]}</code>);
     lastIdx = regex.lastIndex;
   }
   if (lastIdx < remaining.length) parts.push(<span key={i++}>{remaining.slice(lastIdx)}</span>);
@@ -319,35 +333,35 @@ function AuthView({ state, dispatch }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: C.bg }}>
-      <div className="fade-in" style={{ ...S.card, width: 420, maxWidth: '90vw', padding: 32 }}>
-        <div className="float" style={{ fontSize: 36, textAlign: 'center', marginBottom: 12 }}>&#9670;</div>
-        <h1 style={{ fontSize: 26, fontWeight: 700, marginBottom: 4, textAlign: 'center', letterSpacing: '-0.02em' }}>BackOffice Agent</h1>
-        <p style={{ color: C.textMuted, textAlign: 'center', marginBottom: 28, fontSize: 14 }}>Five AI agents. Zero admin hours.</p>
+      <Card className="fade-in w-[420px] max-w-[90vw] p-8">
+        <div className="float text-4xl text-center mb-3">&#9670;</div>
+        <h1 className="text-3xl font-extrabold text-center mb-1.5 tracking-tight text-foreground">BackOffice Agent</h1>
+        <p className="text-muted-foreground text-center mb-7 text-sm">Five AI agents. Zero admin hours.</p>
 
-        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
+        <div className="flex mb-6 rounded-lg overflow-hidden border border-border">
           {['login', 'register'].map((m) => (
             <button key={m} onClick={() => dispatch({ type: 'SET_AUTH_MODE', mode: m })}
-              style={{ flex: 1, padding: '10px 0', background: state.authMode === m ? C.primary : 'transparent', color: state.authMode === m ? C.text : C.textMuted, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>
+              className={cn('flex-1 py-2.5 text-sm font-semibold capitalize transition-colors', state.authMode === m ? 'bg-primary text-white' : 'bg-transparent text-muted-foreground hover:text-foreground')}>
               {m}
             </button>
           ))}
         </div>
 
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           {state.authMode === 'register' && (
             <>
-              <input style={S.input} placeholder="Your name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <input style={S.input} placeholder="Business name (optional)" value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })} />
+              <Input placeholder="Your name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <Input placeholder="Business name (optional)" value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })} />
             </>
           )}
-          <input style={S.input} type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-          <input style={S.input} type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
-          {state.authError && <p style={{ color: C.danger, fontSize: 13 }}>{state.authError}</p>}
-          <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>
+          <Input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
+          <Input type="password" placeholder="Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
+          {state.authError && <p className="text-destructive text-sm">{state.authError}</p>}
+          <Button type="submit" className="w-full mt-1" disabled={loading}>
             {loading ? 'Working...' : state.authMode === 'login' ? 'Sign In' : 'Create Account'}
-          </button>
+          </Button>
         </form>
-      </div>
+      </Card>
     </div>
   );
 }
@@ -355,56 +369,146 @@ function AuthView({ state, dispatch }) {
 // ─── Sidebar ──────────────────────────────────────────────────────
 function Sidebar({ state, dispatch }) {
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: '\u25A0', color: C.accent },
-    { id: 'projects', label: 'Projects', icon: '\u25B6', color: C.proposal },
-    { id: 'clients', label: 'Clients', icon: '\u25CF', color: C.invoice },
-    { id: 'kanban', label: 'Milestone Board', icon: '\u25A6', color: C.warning },
+    { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+    { id: 'projects', label: 'Projects', Icon: FolderOpen },
+    { id: 'clients', label: 'Clients', Icon: Users },
+    { id: 'kanban', label: 'Milestone Board', Icon: Kanban },
     { id: '_divider' },
-    { id: 'chat', label: 'AI Chat', icon: '\u25C6', color: C.primary },
-    { id: 'onboarding', label: 'Getting Started', icon: '\u2605', color: C.success },
-    { id: 'activity', label: 'Activity Log', icon: '\u25E6', color: C.insight },
+    { id: 'chat', label: 'AI Chat', Icon: MessageSquare },
+    { id: 'onboarding', label: 'Getting Started', Icon: BookOpen },
+    { id: 'activity', label: 'Activity Log', Icon: Activity },
   ];
 
+  const user = state.user;
+  const initials = user?.name
+    ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+    : (user?.email || '?')[0].toUpperCase();
+
   return (
-    <div style={{ width: 220, background: C.surface, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-      <div style={{ padding: '20px 16px', borderBottom: `1px solid ${C.border}` }}>
-        <h2 style={{ fontSize: 16, fontWeight: 700 }}>BackOffice</h2>
-        <p style={{ fontSize: 11, color: C.textDim, marginTop: 2 }}>AI-powered back-office</p>
+    <div className="w-[240px] shrink-0 flex flex-col border-r border-border" style={{ background: C.surface }}>
+      {/* Logo */}
+      <div className="h-16 px-5 flex items-center gap-3 border-b border-border shrink-0">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)', boxShadow: '0 0 18px rgba(37,99,235,0.45)' }}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="2" y="5" width="16" height="11" rx="2" stroke="white" strokeWidth="1.5" fill="none"/>
+            <path d="M6 5V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+            <circle cx="10" cy="10.5" r="1.25" fill="white"/>
+            <path d="M10 10.5 L14.5 8.5" stroke="white" strokeWidth="1.25" strokeLinecap="round" opacity="0.6"/>
+            <path d="M10 10.5 L5.5 12.5" stroke="white" strokeWidth="1.25" strokeLinecap="round" opacity="0.6"/>
+          </svg>
+        </div>
+        <p className="text-base font-extrabold tracking-tight text-foreground">BackOffice</p>
       </div>
 
-      <nav style={{ flex: 1, padding: '12px 0' }}>
+      {/* Nav */}
+      <nav className="flex-1 py-4 px-3 flex flex-col gap-0.5">
         {navItems.map((item) => {
-          if (item.id === '_divider') return <div key="_divider" style={{ height: 1, background: C.border, margin: '8px 16px' }} />;
+          if (item.id === '_divider') return <div key="_divider" className="my-2 mx-1 h-px" style={{ background: C.border }} />;
           const active = state.view === item.id || (item.id === 'projects' && state.view === 'project_detail');
+          const { Icon } = item;
           return (
-            <button key={item.id} className="nav-item" onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 16px', background: active ? C.surfaceHover : 'transparent', border: 'none', borderLeft: active ? `3px solid ${item.color}` : '3px solid transparent', color: active ? C.text : C.textMuted, cursor: 'pointer', fontSize: 14, textAlign: 'left', borderRadius: 0, transition: 'all 0.15s' }}>
-              <span style={{ color: item.color, fontSize: 10 }}>{item.icon}</span>
-              {item.label}
-              {item.id === 'chat' && state.chatStreaming && (
-                <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.primary, marginLeft: 'auto' }} />
+            <button key={item.id}
+              className={cn(
+                'flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-left transition-all group',
+                active
+                  ? 'text-foreground font-semibold'
+                  : 'text-muted-foreground hover:text-foreground font-medium'
               )}
+              style={{ background: active ? C.primary + '18' : 'transparent', border: 'none', cursor: 'pointer' }}
+              onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}>
+              <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors"
+                style={{ background: active ? C.primary + '22' : 'transparent' }}>
+                <Icon size={17} style={{ color: active ? C.primary : 'inherit' }} />
+              </span>
+              <span className="flex-1">{item.label}</span>
+              {item.id === 'chat' && state.chatStreaming && (
+                <span className="typing-dot w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.primary }} />
+              )}
+              {active && <ChevronRight size={14} className="shrink-0 opacity-40" />}
             </button>
           );
         })}
       </nav>
 
-      <div style={{ padding: 16, borderTop: `1px solid ${C.border}` }}>
-        <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 8 }}>{state.user?.name || state.user?.email}</p>
-        <button onClick={() => dispatch({ type: 'LOGOUT' })} style={{ ...S.btnOutline, width: '100%', fontSize: 12 }}>Sign Out</button>
+      {/* User profile */}
+      <div className="p-3 border-t border-border shrink-0">
+        <div className="flex items-center gap-2.5 rounded-xl p-2.5" style={{ background: C.bg }}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
+            style={{ background: C.primary + '25', color: C.primary }}>
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-foreground truncate leading-tight">{user?.name || 'User'}</p>
+            <p className="text-[10px] text-muted-foreground truncate leading-tight">{user?.email}</p>
+          </div>
+          <button className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-white/5"
+            style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+            onClick={() => dispatch({ type: 'LOGOUT' })} title="Sign out">
+            <LogOut size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Top Header ───────────────────────────────────────────────────
+const VIEW_TITLES = {
+  dashboard: 'Dashboard', projects: 'Projects', project_detail: 'Project Detail',
+  clients: 'Clients', kanban: 'Milestone Board', chat: 'AI Chat',
+  onboarding: 'Getting Started', activity: 'Activity Log',
+};
+
+function TopHeader({ state }) {
+  const user = state.user;
+  const initials = user?.name
+    ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+    : (user?.email || '?')[0].toUpperCase();
+  const title = VIEW_TITLES[state.view] || 'Dashboard';
+
+  return (
+    <div className="h-16 flex items-center gap-4 px-8 lg:px-10 border-b border-border shrink-0"
+      style={{ background: C.surface + 'CC', backdropFilter: 'blur(12px)' }}>
+      <div>
+        <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">{title}</h1>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        <div className="relative hidden md:block">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <input placeholder="Search..." className="h-9 pl-8 pr-4 rounded-xl border text-sm focus:outline-none focus:border-primary transition-colors w-[180px]"
+            style={{ background: C.bg, border: `1px solid ${C.border}`, color: C.text }} />
+        </div>
+        <button className="w-9 h-9 rounded-xl flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+          style={{ background: C.bg, border: `1px solid ${C.border}`, cursor: 'pointer' }}>
+          <Bell size={15} />
+        </button>
+        <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold"
+          style={{ background: C.primary + '25', color: C.primary }}>
+          {initials}
+        </div>
       </div>
     </div>
   );
 }
 
 // ─── Dashboard ────────────────────────────────────────────────────
-function KPICard({ label, value, color, subtitle }) {
+function KPICard({ label, value, color, subtitle, icon: Icon }) {
   return (
-    <div style={{ ...S.card, borderTop: `3px solid ${color}` }}>
-      <p style={{ color: C.textMuted, fontSize: 12, marginBottom: 4 }}>{label}</p>
-      <p style={{ fontSize: 28, fontWeight: 700 }}>{value}</p>
-      {subtitle && <p style={{ color: C.textDim, fontSize: 12, marginTop: 4 }}>{subtitle}</p>}
-    </div>
+    <Card className="hover:border-primary/40 transition-all hover:-translate-y-px">
+      <CardContent className="pt-5 pb-5">
+        <div className="flex items-start justify-between mb-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+          {Icon && (
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: color + '1A' }}>
+              <Icon size={17} style={{ color }} />
+            </div>
+          )}
+        </div>
+        <p className="text-4xl font-extrabold tracking-tight text-foreground leading-none">{value}</p>
+        {subtitle && <p className="text-sm text-muted-foreground mt-2.5">{subtitle}</p>}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -415,46 +519,57 @@ function DashboardView({ state, dispatch }) {
   }, []);
 
   const d = state.dashboard;
-  if (state.dashboardLoading || !d) return <p style={{ color: C.textMuted, padding: 40 }}>Loading dashboard...</p>;
+  if (state.dashboardLoading || !d) return <p className="text-muted-foreground italic text-center p-10">Loading dashboard...</p>;
 
   const kpis = d.kpis || {};
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>Dashboard</h1>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 32 }}>
-        <KPICard label="Pipeline Value" value={fmt(kpis.pipeline_cents)} color={C.proposal} subtitle={`${kpis.active_projects || 0} active projects`} />
-        <KPICard label="Revenue (30d)" value={fmt(kpis.paid_cents)} color={C.success} />
-        <KPICard label="Outstanding" value={fmt(kpis.outstanding_cents)} color={C.warning} />
-        <KPICard label="Overdue" value={fmt(kpis.overdue_cents)} color={C.danger} subtitle={kpis.overdue_count ? `${kpis.overdue_count} invoices` : 'None'} />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <KPICard label="Pipeline Value" value={fmt(kpis.pipeline_cents)} color={C.accent} subtitle={`${kpis.active_projects || 0} active projects`} icon={TrendingUp} />
+        <KPICard label="Total Clients" value={kpis.total_clients ?? 0} color={C.accent} icon={Users} />
+        <KPICard label="Revenue (30d)" value={fmt(kpis.paid_cents)} color={C.accent} icon={DollarSign} />
+        <KPICard label="Outstanding" value={fmt(kpis.outstanding_cents)} color={C.accent} subtitle={kpis.overdue_count ? `${kpis.overdue_count} overdue` : undefined} icon={Clock} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-        <div style={S.card}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Active Projects</h3>
-          {(d.projects || []).length === 0 && <p style={{ color: C.textDim, fontSize: 13 }}>No active projects</p>}
-          {(d.projects || []).map((p) => (
-            <div key={p.id} onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(p.id, dispatch); }}
-              style={{ padding: '10px 0', borderBottom: `1px solid ${C.border}`, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <p style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</p>
-                <p style={{ fontSize: 12, color: C.textMuted }}>{p.client_name || 'No client'}</p>
+      <div className="grid grid-cols-2 gap-5">
+        <Card>
+          <CardHeader><CardTitle>Active Projects</CardTitle></CardHeader>
+          <CardContent>
+            {(d.projects || []).length === 0 && <p className="text-muted-foreground text-sm italic text-center py-2">No active projects</p>}
+            {(d.projects || []).map((p) => (
+              <div key={p.id} onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(p.id, dispatch); }}
+                className="py-3 border-b border-border last:border-0 cursor-pointer flex justify-between items-center hover:opacity-80 transition-opacity">
+                <div>
+                  <p className="text-sm font-bold text-foreground">{p.name}</p>
+                  <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Client:</span> {p.client_name || 'No client'}</p>
+                </div>
+                <span className="text-sm font-semibold" style={{ color: C.proposal }}>{fmt(p.budget_cents)}</span>
               </div>
-              <span style={{ fontSize: 14, fontWeight: 600, color: C.proposal }}>{fmt(p.budget_cents)}</span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </CardContent>
+        </Card>
 
-        <div style={S.card}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 12 }}>Recent Agent Activity</h3>
-          {(d.recent_activity || []).length === 0 && <p style={{ color: C.textDim, fontSize: 13 }}>No recent activity</p>}
-          {(d.recent_activity || []).slice(0, 8).map((log, i) => (
-            <div key={i} style={{ padding: '8px 0', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={S.badge(AGENT_COLORS[log.agent] || C.textDim)}>{AGENT_NAMES[log.agent] || log.agent}</span>
-              <span style={{ fontSize: 12, color: C.textDim, marginLeft: 'auto' }}>{log.duration_ms ? `${log.duration_ms}ms` : ''} {log.created_at ? timeAgo(log.created_at) : ''}</span>
-            </div>
-          ))}
-        </div>
+        <Card>
+          <CardHeader><CardTitle>Upcoming Milestones</CardTitle></CardHeader>
+          <CardContent>
+            {(d.upcoming_milestones || []).length === 0 && <p className="text-muted-foreground text-sm italic text-center py-2">No upcoming milestones</p>}
+            {(d.upcoming_milestones || []).map((m) => {
+              const statusColor = { active: C.primary, completed: C.warning, pending: C.text }[m.status] || C.textDim;
+              return (
+                <div key={m.id}
+                  onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(m.project_id, dispatch); }}
+                  className="py-3 border-b border-border last:border-0 cursor-pointer flex items-center gap-3 hover:opacity-80 transition-opacity">
+                  <span style={S.badge(statusColor)}>{m.status}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{m.title}</p>
+                    <p className="text-xs text-muted-foreground">{m.project_name}</p>
+                  </div>
+                  {m.amount_cents > 0 && <span className="text-sm font-semibold shrink-0" style={{ color: C.accent }}>{fmt(m.amount_cents)}</span>}
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -464,7 +579,7 @@ function DashboardView({ state, dispatch }) {
 function AgentBadge({ agent }) {
   const color = AGENT_COLORS[agent] || C.textDim;
   const name = AGENT_NAMES[agent] || agent;
-  return <span style={S.badge(color)}>{name}</span>;
+  return <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: color + '18', color, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{name}</span>;
 }
 
 function ToolCallPill({ event }) {
@@ -489,9 +604,10 @@ function CopyButton({ text }) {
     navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   };
   return (
-    <button onClick={handleCopy} style={{ ...S.btnOutline, padding: '1px 8px', fontSize: 11, marginLeft: 'auto', color: copied ? C.success : C.textDim, borderColor: copied ? C.success + '44' : C.border }}>
+    <Button variant="outline" size="sm" onClick={handleCopy} className="ml-auto h-6 px-2 text-[11px]"
+      style={{ color: copied ? C.success : undefined, borderColor: copied ? C.success + '44' : undefined }}>
       {copied ? 'Copied' : 'Copy'}
-    </button>
+    </Button>
   );
 }
 
@@ -609,21 +725,20 @@ function ChatView({ state, dispatch }) {
   ];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 48px)' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px - 80px)' }}>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, flexShrink: 0 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>AI Chat</h1>
+      <div className="flex items-center gap-4 mb-4 shrink-0">
         <select value={state.chatProjectId || ''} onChange={(e) => dispatch({ type: 'SET_CHAT_PROJECT', projectId: e.target.value || null })}
-          style={{ ...S.input, width: 220, padding: '6px 10px' }}>
+          className="h-9 rounded-lg border border-border bg-background text-sm text-foreground px-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 w-[220px]">
           <option value="">All projects</option>
           {state.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
         {state.activeAgents.length > 0 && (
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center', marginLeft: 'auto' }}>
+          <div className="flex gap-1 items-center ml-auto">
             {state.activeAgents.map((a) => (
-              <span key={a} className="typing-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: AGENT_COLORS[a] || C.textDim }} title={AGENT_NAMES[a]} />
+              <span key={a} className="typing-dot w-2 h-2 rounded-full" style={{ background: AGENT_COLORS[a] || C.textDim }} title={AGENT_NAMES[a]} />
             ))}
-            <span style={{ fontSize: 12, color: C.textMuted, marginLeft: 4 }}>Working...</span>
+            <span className="text-xs text-muted-foreground ml-1">Working...</span>
           </div>
         )}
       </div>
@@ -631,42 +746,39 @@ function ChatView({ state, dispatch }) {
       {/* Messages */}
       <div style={{ flex: 1, overflowY: 'auto', paddingRight: 8 }}>
         {state.chatMessages.length === 0 && (
-          <div className="fade-in" style={{ textAlign: 'center', padding: '80px 0' }}>
-            <div className="float" style={{ fontSize: 40, marginBottom: 16 }}>&#9670;</div>
-            <p style={{ fontSize: 20, fontWeight: 600, marginBottom: 8, letterSpacing: '-0.01em' }}>Ask your AI back-office team anything</p>
-            <p style={{ color: C.textMuted, fontSize: 14, marginBottom: 28 }}>Your Chief Agent will route to the right specialist.</p>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+          <div className="fade-in text-center py-20">
+            <div className="float text-4xl mb-4">&#9670;</div>
+            <p className="text-xl font-semibold tracking-tight mb-2">Ask your AI back-office team anything</p>
+            <p className="text-muted-foreground text-sm mb-7">Your Chief Agent will route to the right specialist.</p>
+            <div className="flex gap-2 justify-center flex-wrap">
               {quickActions.map((qa) => (
-                <button key={qa.label} className="btn-outline" onClick={() => { setInput(qa.msg); }}
-                  style={{ ...S.btnOutline, borderColor: C.primary + '44' }}>
-                  {qa.label}
-                </button>
+                <Button key={qa.label} variant="outline" size="sm" onClick={() => setInput(qa.msg)}>{qa.label}</Button>
               ))}
             </div>
           </div>
         )}
         {state.chatMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
         {state.chatStreaming && (
-          <div style={{ display: 'flex', gap: 4, padding: '0 16px', marginBottom: 16 }}>
-            <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.primary, animationDelay: '0s' }} />
-            <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.primary, animationDelay: '0.2s' }} />
-            <span className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: C.primary, animationDelay: '0.4s' }} />
+          <div className="flex gap-1 px-4 mb-4">
+            <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: C.primary, animationDelay: '0s' }} />
+            <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: C.primary, animationDelay: '0.2s' }} />
+            <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: C.primary, animationDelay: '0.4s' }} />
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Input */}
-      <div style={{ flexShrink: 0, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <textarea value={input} onChange={(e) => setInput(e.target.value)}
+      <div className="shrink-0 pt-3 border-t border-border">
+        <div className="flex gap-2">
+          <Textarea value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
             placeholder="Ask your AI team..." rows={1}
-            style={{ ...S.input, resize: 'none', flex: 1, minHeight: 44, maxHeight: 120 }} />
+            className="flex-1 min-h-[44px] max-h-[120px]" />
           {state.chatStreaming ? (
-            <button onClick={handleStop} style={{ ...S.btnDanger, padding: '10px 20px' }}>Stop</button>
+            <Button variant="destructive" onClick={handleStop}>Stop</Button>
           ) : (
-            <button onClick={handleSend} style={{ ...S.btn, opacity: !input.trim() ? 0.5 : 1 }} disabled={!input.trim()}>Send</button>
+            <Button onClick={handleSend} disabled={!input.trim()}>Send</Button>
           )}
         </div>
       </div>
@@ -689,36 +801,33 @@ function ProjectCard({ project: p, dispatch, statusColor, onRefresh }) {
   };
 
   return (
-    <div className="card-hover" style={{ ...S.card, cursor: 'pointer', position: 'relative' }}>
-      <div onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(p.id, dispatch); }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 600, marginRight: 28 }}>{p.name}</h3>
-        </div>
-        <p style={{ fontSize: 13, color: C.textMuted }}>{p.client_name || 'No client'}</p>
-        {p.budget_cents && <p style={{ fontSize: 18, fontWeight: 700, marginTop: 8, color: C.proposal }}>{fmt(p.budget_cents)}</p>}
-        <div style={{ marginTop: 10 }}><span style={S.badge(statusColor[p.status] || C.textDim)}>{p.status}</span></div>
-      </div>
+    <Card className="card-hover cursor-pointer relative hover:border-primary/40">
+      <CardContent className="pt-6" onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); loadProjectDetail(p.id, dispatch); }}>
+        <h3 className="text-base font-bold tracking-tight text-foreground mr-7">{p.name}</h3>
+        <p className="text-sm text-muted-foreground mt-1"><span className="font-semibold text-foreground">Client:</span> {p.client_name || 'No client'}</p>
+        {p.budget_cents && <p className="text-xl font-extrabold tracking-tight mt-2.5" style={{ color: C.proposal }}>{fmt(p.budget_cents)}</p>}
+        <div className="mt-3"><span className={p.status === 'active' ? 'btn-active-breathe' : ''} style={{ ...S.badge(statusColor[p.status] || C.textDim), display: 'inline-flex', alignItems: 'center' }}>{p.status}</span></div>
+      </CardContent>
       {/* Three-dot menu */}
       <button onClick={(e) => { e.stopPropagation(); setMenuOpen(!menuOpen); }}
-        style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: C.textDim, cursor: 'pointer', fontSize: 18, padding: '4px 8px', borderRadius: 6, lineHeight: 1 }}>
+        className="absolute top-4 right-4 text-muted-foreground hover:text-foreground text-lg px-2 py-1 rounded transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>
         {'\u22EE'}
       </button>
       {menuOpen && (
         <>
           <div style={{ position: 'fixed', inset: 0, zIndex: 99 }} onClick={() => setMenuOpen(false)} />
-          <div style={{ position: 'absolute', top: 38, right: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 4, zIndex: 100, minWidth: 140, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+          <div className="absolute top-9 right-3 rounded-xl p-1 z-[100] min-w-[140px]" style={{ background: C.surface, border: `1px solid ${C.border}`, boxShadow: '0 8px 24px rgba(0,0,0,0.4)' }}>
             {['active', 'paused', 'completed', 'cancelled'].filter((s) => s !== p.status).map((s) => (
               <button key={s} onClick={(e) => { e.stopPropagation(); handleStatus(s); }}
-                style={{ display: 'block', width: '100%', padding: '8px 12px', background: 'none', border: 'none', color: s === 'cancelled' ? C.danger : C.textMuted, cursor: 'pointer', fontSize: 13, textAlign: 'left', borderRadius: 6, textTransform: 'capitalize' }}
-                onMouseEnter={(e) => { e.target.style.background = C.surfaceHover; }}
-                onMouseLeave={(e) => { e.target.style.background = 'none'; }}>
+                className="block w-full px-3 py-2 text-sm text-left rounded-lg capitalize transition-colors hover:bg-white/5"
+                style={{ background: 'none', border: 'none', color: s === 'cancelled' ? C.danger : C.textMuted, cursor: 'pointer' }}>
                 {s === 'cancelled' ? 'Cancel Project' : `Set ${s}`}
               </button>
             ))}
           </div>
         </>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -750,37 +859,44 @@ function ProjectsView({ state, dispatch }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Projects</h1>
-        <button onClick={() => setShowNew(true)} style={S.btn}>New Project</button>
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-muted-foreground">
+          {state.projectsLoading ? 'Loading...' : `${state.projects.length} total project${state.projects.length !== 1 ? 's' : ''}`}
+        </p>
+        <Button onClick={() => setShowNew(true)}><Plus size={15} />New Project</Button>
       </div>
 
       {showNew && (
-        <form onSubmit={handleCreate} style={{ ...S.card, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input style={S.input} placeholder="Project name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <select style={{ ...S.input }} value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
-              <option value="">No client</option>
-              {state.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <input style={S.input} type="number" placeholder="Budget ($)" value={form.budget_cents} onChange={(e) => setForm({ ...form, budget_cents: e.target.value })} />
-          </div>
-          <textarea style={{ ...S.input, minHeight: 60 }} placeholder="Scope summary" value={form.scope_summary} onChange={(e) => setForm({ ...form, scope_summary: e.target.value })} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="submit" style={S.btn}>Create</button>
-            <button type="button" onClick={() => setShowNew(false)} style={S.btnOutline}>Cancel</button>
-          </div>
-        </form>
+        <Card className="mb-5">
+          <CardContent className="pt-6">
+            <form onSubmit={handleCreate} className="flex flex-col gap-3">
+              <Input placeholder="Project name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <div className="flex gap-3">
+                <select className="h-10 flex-1 rounded-lg border border-border bg-background text-sm text-foreground px-3 focus:outline-none focus:border-primary"
+                  value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
+                  <option value="">No client</option>
+                  {state.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <Input type="number" placeholder="Budget ($)" value={form.budget_cents} onChange={(e) => setForm({ ...form, budget_cents: e.target.value })} />
+              </div>
+              <Textarea placeholder="Scope summary" value={form.scope_summary} onChange={(e) => setForm({ ...form, scope_summary: e.target.value })} className="min-h-[60px]" />
+              <div className="flex gap-2">
+                <Button type="submit">Create</Button>
+                <Button type="button" variant="outline" onClick={() => setShowNew(false)}>Cancel</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       )}
 
-      {state.projectsLoading && <p style={{ color: C.textMuted }}>Loading...</p>}
+      {state.projectsLoading && <p className="text-muted-foreground italic text-center">Loading...</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
         {state.projects.map((p) => (
           <ProjectCard key={p.id} project={p} dispatch={dispatch} statusColor={statusColor} onRefresh={() => api('/projects').then(({ projects }) => dispatch({ type: 'SET_PROJECTS', projects }))} />
         ))}
       </div>
-      {!state.projectsLoading && state.projects.length === 0 && <p style={{ color: C.textDim, textAlign: 'center', padding: 40 }}>No projects yet. Create your first project to get started.</p>}
+      {!state.projectsLoading && state.projects.length === 0 && <p className="text-muted-foreground italic text-center py-10">No projects yet. Create your first project to get started.</p>}
     </div>
   );
 }
@@ -828,14 +944,16 @@ function DocContent({ content, color }) {
 
 function ConfirmModal({ message, onConfirm, onCancel }) {
   return (
-    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-      <div className="fade-in" onClick={(e) => e.stopPropagation()} style={{ ...S.card, width: 360, padding: 24, textAlign: 'center' }}>
-        <p style={{ fontSize: 15, fontWeight: 500, marginBottom: 20 }}>{message}</p>
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-          <button onClick={onCancel} className="btn-outline" style={{ ...S.btnOutline, padding: '8px 24px' }}>Cancel</button>
-          <button onClick={onConfirm} style={{ ...S.btnDanger, padding: '8px 24px' }}>Delete</button>
-        </div>
-      </div>
+    <div onClick={onCancel} className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000]">
+      <Card className="fade-in w-[360px] text-center" onClick={(e) => e.stopPropagation()}>
+        <CardContent className="pt-6">
+          <p className="text-sm font-medium mb-5">{message}</p>
+          <div className="flex gap-2.5 justify-center">
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
+            <Button variant="destructive" onClick={onConfirm}>Delete</Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -856,24 +974,24 @@ function CollapsibleDoc({ doc, color, type, onDelete, children }) {
     } catch { /* ignore */ }
   };
   return (
-    <div style={{ ...S.card, marginBottom: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }} onClick={() => setOpen(!open)}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: C.textDim, fontSize: 12 }}>{open ? '\u25BC' : '\u25B6'}</span>
-          <span style={S.badge(color)}>{doc.status}</span>
-          <span style={{ fontSize: 13, color: C.text }}>{title}</span>
+    <Card className="mb-3">
+      <CardContent className="pt-4 pb-4">
+        <div className="flex justify-between items-center cursor-pointer" onClick={() => setOpen(!open)}>
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-xs">{open ? '\u25BC' : '\u25B6'}</span>
+            <span style={S.badge(color)}>{doc.status}</span>
+            <span className="text-sm text-foreground">{title}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">{new Date(doc.created_at).toLocaleDateString()}</span>
+            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); downloadJSON(doc, `${type}-${doc.id.slice(0, 8)}.json`); }}>Download</Button>
+            <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={handleDelete}>Delete</Button>
+          </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, color: C.textDim }}>{new Date(doc.created_at).toLocaleDateString()}</span>
-          <button onClick={(e) => { e.stopPropagation(); downloadJSON(doc, `${type}-${doc.id.slice(0, 8)}.json`); }}
-            style={{ ...S.btnOutline, padding: '2px 8px', fontSize: 11 }}>Download</button>
-          <button onClick={handleDelete}
-            style={{ ...S.btnOutline, padding: '2px 8px', fontSize: 11, color: C.danger, borderColor: C.danger + '44' }}>Delete</button>
-        </div>
-      </div>
-      {open && <div style={{ marginTop: 10 }}>{children}</div>}
-      {showConfirm && <ConfirmModal message={`Delete this ${type}?`} onConfirm={confirmDelete} onCancel={() => setShowConfirm(false)} />}
-    </div>
+        {open && <div className="mt-3">{children}</div>}
+        {showConfirm && <ConfirmModal message={`Delete this ${type}?`} onConfirm={confirmDelete} onCancel={() => setShowConfirm(false)} />}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -884,15 +1002,17 @@ function ScopeEventCard({ ev, onDelete }) {
     try { await api(`/documents/scope-events/${ev.id}`, { method: 'DELETE' }); if (onDelete) onDelete(); } catch { /* ignore */ }
   };
   return (
-    <div style={{ ...S.card, marginBottom: 12, display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      <span style={S.badge(ev.event_type === 'change_order' ? C.danger : ev.event_type === 'approved' ? C.success : C.scope)}>{ev.event_type}</span>
-      <div style={{ flex: 1 }}>
-        <p style={{ fontSize: 14 }}>{ev.description}</p>
-        {ev.estimated_cost_cents && <p style={{ fontSize: 13, color: C.warning, marginTop: 4 }}>{fmt(ev.estimated_cost_cents)} estimated</p>}
-      </div>
-      <button onClick={() => setShowConfirm(true)} style={{ ...S.btnOutline, padding: '2px 8px', fontSize: 11, color: C.danger, borderColor: C.danger + '44', flexShrink: 0 }}>Delete</button>
-      {showConfirm && <ConfirmModal message="Delete this scope event?" onConfirm={handleDelete} onCancel={() => setShowConfirm(false)} />}
-    </div>
+    <Card className="mb-3">
+      <CardContent className="pt-4 pb-4 flex gap-3 items-start">
+        <span style={S.badge(ev.event_type === 'change_order' ? C.danger : ev.event_type === 'approved' ? C.success : C.scope)}>{ev.event_type}</span>
+        <div className="flex-1">
+          <p className="text-sm text-foreground">{ev.description}</p>
+          {ev.estimated_cost_cents && <p className="text-sm mt-1" style={{ color: C.warning }}>{fmt(ev.estimated_cost_cents)} estimated</p>}
+        </div>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[11px] shrink-0" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => setShowConfirm(true)}>Delete</Button>
+        {showConfirm && <ConfirmModal message="Delete this scope event?" onConfirm={handleDelete} onCancel={() => setShowConfirm(false)} />}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -928,34 +1048,109 @@ function ProjectChat({ projectId, state, dispatch }) {
   }, [input, state.chatStreaming, projectId, dispatch]);
 
   return (
-    <div style={{ ...S.card, display: 'flex', flexDirection: 'column', height: 420, padding: 0, overflow: 'hidden' }}>
-      <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>Project Chat</span>
-        {state.activeAgents.map((a) => <span key={a} className="typing-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: AGENT_COLORS[a] || C.textDim }} />)}
-        <button onClick={() => { localStorage.removeItem(`chat_${projectId}`); dispatch({ type: 'CHAT_CLEAR' }); }}
-          style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.textDim, fontSize: 11, cursor: 'pointer' }}>Clear</button>
+    <Card className="flex flex-col h-[420px] overflow-hidden p-0">
+      <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
+        <span className="text-sm font-semibold text-foreground">Project Chat</span>
+        {state.activeAgents.map((a) => <span key={a} className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: AGENT_COLORS[a] || C.textDim }} />)}
+        <button className="ml-auto text-[11px] text-muted-foreground hover:text-foreground transition-colors" style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+          onClick={() => { localStorage.removeItem(`chat_${projectId}`); dispatch({ type: 'CHAT_CLEAR' }); }}>Clear</button>
       </div>
-      <div style={{ flex: 1, overflowY: 'auto', padding: 14 }}>
-        {state.chatMessages.length === 0 && <p style={{ color: C.textDim, fontSize: 13, textAlign: 'center', padding: 20 }}>Ask your agents about this project.</p>}
+      <div className="flex-1 overflow-y-auto p-3.5">
+        {state.chatMessages.length === 0 && <p className="text-muted-foreground text-sm text-center py-5 italic">Ask your agents about this project.</p>}
         {state.chatMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
         {state.chatStreaming && (
-          <div style={{ display: 'flex', gap: 4, padding: '4px 0' }}>
-            <span className="typing-dot" style={{ width: 5, height: 5, borderRadius: '50%', background: C.primary }} />
-            <span className="typing-dot" style={{ width: 5, height: 5, borderRadius: '50%', background: C.primary, animationDelay: '0.2s' }} />
-            <span className="typing-dot" style={{ width: 5, height: 5, borderRadius: '50%', background: C.primary, animationDelay: '0.4s' }} />
+          <div className="flex gap-1 py-1">
+            <span className="typing-dot w-1 h-1 rounded-full" style={{ background: C.primary }} />
+            <span className="typing-dot w-1 h-1 rounded-full" style={{ background: C.primary, animationDelay: '0.2s' }} />
+            <span className="typing-dot w-1 h-1 rounded-full" style={{ background: C.primary, animationDelay: '0.4s' }} />
           </div>
         )}
         <div ref={endRef} />
       </div>
-      <div style={{ padding: 10, borderTop: `1px solid ${C.border}`, display: 'flex', gap: 6 }}>
-        <textarea value={input} onChange={(e) => setInput(e.target.value)}
+      <div className="p-2.5 border-t border-border flex gap-1.5">
+        <Textarea value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Ask about this project..." rows={1}
-          style={{ ...S.input, resize: 'none', flex: 1, minHeight: 36, fontSize: 13, padding: '8px 12px' }} />
+          placeholder="Ask about this project..." rows={1} className="flex-1 min-h-[36px] text-sm py-2 px-3" />
         {state.chatStreaming
-          ? <button onClick={() => abortRef.current?.abort()} style={{ ...S.btnDanger, padding: '6px 14px', fontSize: 12 }}>Stop</button>
-          : <button onClick={() => send()} style={{ ...S.btn, padding: '6px 14px', fontSize: 12, opacity: !input.trim() ? 0.5 : 1 }} disabled={!input.trim()}>Send</button>}
+          ? <Button variant="destructive" size="sm" onClick={() => abortRef.current?.abort()}>Stop</Button>
+          : <Button size="sm" onClick={() => send()} disabled={!input.trim()}>Send</Button>}
       </div>
+    </Card>
+  );
+}
+
+// ─── Client Combobox ─────────────────────────────────────────────
+function ClientCombobox({ clients, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = clients.find((c) => c.id === value);
+  const filtered = clients.filter((c) => c.name.toLowerCase().includes(search.toLowerCase()));
+
+  const initials = (name) => name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" onClick={() => { setOpen((o) => !o); setSearch(''); }}
+        className="w-full h-10 rounded-lg border border-border bg-background text-sm text-foreground px-3 flex items-center justify-between gap-2 hover:border-primary/50 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 transition-colors">
+        {selected ? (
+          <span className="flex items-center gap-2">
+            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+              style={{ background: C.primary + 'CC' }}>{initials(selected.name)}</span>
+            {selected.name}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">No client</span>
+        )}
+        <ChevronDown size={14} className="text-muted-foreground shrink-0" style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 top-[calc(100%+4px)] left-0 right-0 rounded-xl border border-border shadow-xl overflow-hidden"
+          style={{ background: C.surface }}>
+          {/* Search */}
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search clients..."
+                className="w-full h-8 pl-8 pr-3 rounded-lg bg-background border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary" />
+              {search && <button type="button" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"><X size={12} /></button>}
+            </div>
+          </div>
+
+          {/* List */}
+          <div className="max-h-48 overflow-y-auto py-1">
+            <button type="button" onClick={() => { onChange(''); setOpen(false); }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-white/5 transition-colors text-muted-foreground">
+              <span className="w-5 h-5 shrink-0" />
+              <span>No client</span>
+              {!value && <Check size={13} className="ml-auto text-primary" />}
+            </button>
+            {filtered.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-4 italic">No clients match</p>
+            )}
+            {filtered.map((c) => (
+              <button key={c.id} type="button" onClick={() => { onChange(c.id); setOpen(false); }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm hover:bg-white/5 transition-colors text-foreground">
+                <span className="w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                  style={{ background: C.primary + 'CC' }}>{initials(c.name)}</span>
+                <span className="truncate">{c.name}</span>
+                {c.email && <span className="text-xs text-muted-foreground truncate ml-1">{c.email}</span>}
+                {value === c.id && <Check size={13} className="ml-auto shrink-0 text-primary" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1048,17 +1243,17 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
     <div style={{ ...S.card, marginBottom: 20 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <h3 style={{ fontSize: 16, fontWeight: 600 }}>Milestones</h3>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={onRefresh} style={{ ...S.btnOutline, fontSize: 12 }} title="Refresh">Refresh</button>
-          <button onClick={() => setShowForm(!showForm)} style={{ ...S.btnOutline, fontSize: 12 }}>{showForm ? 'Cancel' : '+ Add'}</button>
-          <button onClick={handleShare} style={{ ...S.btnOutline, fontSize: 12, borderColor: C.accent + '44', color: C.accent }}>Share with Client</button>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onRefresh}>Refresh</Button>
+          <Button variant="outline" size="sm" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : <><Plus size={13} />Add</>}</Button>
+          <Button variant="outline" size="sm" onClick={handleShare}>Share with Client</Button>
         </div>
       </div>
 
       {shareUrl && (
         <div style={{ background: C.bg, borderRadius: 8, padding: 10, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: C.accent, wordBreak: 'break-all' }}>{shareUrl}</span>
-          <button onClick={() => { navigator.clipboard.writeText(shareUrl); }} style={{ ...S.btnOutline, fontSize: 11, marginLeft: 8, flexShrink: 0 }}>Copy</button>
+          <Button variant="outline" size="sm" className="shrink-0 ml-2" onClick={() => { navigator.clipboard.writeText(shareUrl); }}>Copy</Button>
         </div>
       )}
 
@@ -1068,8 +1263,8 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
           <p style={{ fontSize: 13, fontWeight: 600, color: C.success, marginBottom: 6 }}>Milestone completed! Send this link to your client for approval:</p>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: C.accent, wordBreak: 'break-all', flex: 1 }}>{completedNotice}</span>
-            <button onClick={() => { navigator.clipboard.writeText(completedNotice); }} style={{ ...S.btnOutline, fontSize: 11, flexShrink: 0 }}>Copy</button>
-            <button onClick={() => setCompletedNotice(null)} style={{ ...S.btnOutline, fontSize: 11, flexShrink: 0 }}>Dismiss</button>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => { navigator.clipboard.writeText(completedNotice); }}>Copy</Button>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => setCompletedNotice(null)}>Dismiss</Button>
           </div>
         </div>
       )}
@@ -1089,24 +1284,32 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
 
       {/* Add form */}
       {showForm && (
-        <form onSubmit={handleCreate} style={{ background: C.bg, borderRadius: 10, padding: 16, marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input style={S.input} placeholder="Milestone title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-          <input style={S.input} placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-          <input style={S.input} type="number" step="0.01" placeholder="Amount ($)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
-          <div style={{ display: 'flex', gap: 0, borderRadius: 8, overflow: 'hidden', border: `1px solid ${C.border}` }}>
-            {[{ value: 'approval_needed', label: 'Approval Needed' }, { value: 'auto', label: 'Auto-Approve' }].map((opt) => (
-              <button key={opt.value} type="button" onClick={() => setForm({ ...form, approval_type: opt.value })}
-                style={{ flex: 1, padding: '8px 0', background: form.approval_type === opt.value ? C.primary : 'transparent', color: form.approval_type === opt.value ? C.text : C.textMuted, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
-                {opt.label}
-              </button>
-            ))}
+        <form onSubmit={handleCreate} className="rounded-xl p-4 mb-4 flex flex-col gap-3" style={{ background: C.bg }}>
+          <Input placeholder="Milestone title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+          <Input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+          <Input type="number" step="0.01" placeholder="Amount ($)" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { value: 'approval_needed', label: 'Approval Needed', Icon: UserCheck, color: C.warning },
+              { value: 'auto', label: 'Auto-Approve', Icon: Zap, color: C.success },
+            ].map((opt) => {
+              const active = form.approval_type === opt.value;
+              return (
+                <button key={opt.value} type="button" onClick={() => setForm({ ...form, approval_type: opt.value })}
+                  className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold text-left transition-all"
+                  style={{ background: active ? opt.color + '18' : C.bg, border: `1px solid ${active ? opt.color + '55' : C.border}`, color: active ? opt.color : C.textMuted, cursor: 'pointer' }}>
+                  <opt.Icon size={13} />
+                  {opt.label}
+                </button>
+              );
+            })}
           </div>
-          <button type="submit" style={{ ...S.btn, opacity: loading ? 0.6 : 1 }} disabled={loading}>Add Milestone</button>
+          <Button type="submit" disabled={loading}><Plus size={15} />Add Milestone</Button>
         </form>
       )}
 
       {/* Milestone stepper */}
-      {milestones.length === 0 && !showForm && <p style={{ color: C.textDim, fontSize: 13 }}>No milestones yet. Add milestones to track project progress.</p>}
+      {milestones.length === 0 && !showForm && <p style={{ color: C.textDim, fontSize: 13, fontStyle: 'italic', textAlign: 'center' }}>No milestones yet. Add milestones to track project progress.</p>}
       {milestones.map((m, i) => {
         // Only the current milestone (lowest position not yet approved) can be acted on
         const currentIdx = milestones.findIndex((ms) => ms.status !== 'approved');
@@ -1128,13 +1331,21 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
                 <span style={S.badge(statusColor(m.status))}>{m.status}</span>
               </div>
               {m.description && <p style={{ color: C.textMuted, fontSize: 12, marginTop: 4 }}>{m.description}</p>}
-              {m.approval_type === 'auto' && m.status !== 'approved' && <span style={{ fontSize: 10, color: C.textDim, background: C.bg, padding: '2px 8px', borderRadius: 10, marginTop: 4, display: 'inline-block' }}>Auto-approve</span>}
+              <span className="inline-flex items-center gap-1 mt-2"
+                style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', padding: '3px 8px', borderRadius: 20,
+                  background: m.approval_type === 'auto' ? C.success + '18' : C.warning + '18',
+                  color: m.approval_type === 'auto' ? C.success : C.warning,
+                  border: `1px solid ${m.approval_type === 'auto' ? C.success + '33' : C.warning + '33'}` }}>
+                {m.approval_type === 'auto'
+                  ? <><Zap size={9} style={{ display: 'inline' }} /> Auto-Approve</>
+                  : <><UserCheck size={9} style={{ display: 'inline' }} /> Approval Needed</>}
+              </span>
               {m.rejection_reason && <p style={{ color: C.danger, fontSize: 12, marginTop: 4 }}>Rejected: {m.rejection_reason}</p>}
               {isCurrent && (
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                  {(m.status === 'pending') && <button onClick={() => handleAction(m.id, 'activate')} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px' }}>Activate</button>}
-                  {(m.status === 'active') && <button onClick={() => handleAction(m.id, 'complete')} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px', borderColor: C.warning + '44', color: C.warning }}>Mark Complete</button>}
-                  {(m.status === 'pending') && <button onClick={() => handleDelete(m.id)} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px', borderColor: C.danger + '44', color: C.danger }}>Delete</button>}
+                  {(m.status === 'pending') && <Button variant="outline" size="sm" onClick={() => handleAction(m.id, 'activate')}>Activate</Button>}
+                  {(m.status === 'active') && <Button variant="outline" size="sm" style={{ color: C.warning, borderColor: C.warning + '44' }} onClick={() => handleAction(m.id, 'complete')}>Mark Complete</Button>}
+                  {(m.status === 'pending') && <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => handleDelete(m.id)}>Delete</Button>}
                 </div>
               )}
             </div>
@@ -1153,7 +1364,7 @@ function ProjectDetail({ state, dispatch }) {
   const [editForm, setEditForm] = useState(null);
   const p = state.selectedProject;
 
-  if (state.projectDetailLoading || !p) return <p style={{ color: C.textMuted, padding: 40 }}>Loading project...</p>;
+  if (state.projectDetailLoading || !p) return <p style={{ color: C.textDim, padding: 40, fontStyle: 'italic', textAlign: 'center' }}>Loading project...</p>;
 
   const project = p.project || p;
   const refresh = () => loadProjectDetail(project.id, dispatch, true);
@@ -1177,6 +1388,7 @@ function ProjectDetail({ state, dispatch }) {
     if (editForm.scope_summary !== (project.scope_summary || '')) body.scope_summary = editForm.scope_summary || undefined;
     const newBudget = editForm.budget ? Math.round(parseFloat(editForm.budget) * 100) : null;
     if (newBudget !== (project.budget_cents ? Number(project.budget_cents) : null)) body.budget_cents = newBudget;
+    if (editForm.client_id !== (project.client_id || '')) body.client_id = editForm.client_id || undefined;
     if (Object.keys(body).length > 0) {
       await api(`/projects/${project.id}`, { method: 'PATCH', body });
       refresh();
@@ -1185,7 +1397,10 @@ function ProjectDetail({ state, dispatch }) {
   };
 
   const openEdit = () => {
-    setEditForm({ name: project.name, description: project.description || '', scope_summary: project.scope_summary || '', budget: project.budget_cents ? (Number(project.budget_cents) / 100).toString() : '' });
+    if (state.clients.length === 0) {
+      api('/clients').then(({ clients }) => dispatch({ type: 'SET_CLIENTS', clients })).catch(() => {});
+    }
+    setEditForm({ name: project.name, description: project.description || '', scope_summary: project.scope_summary || '', budget: project.budget_cents ? (Number(project.budget_cents) / 100).toString() : '', client_id: project.client_id || '' });
     setShowEdit(true);
   };
 
@@ -1201,46 +1416,48 @@ function ProjectDetail({ state, dispatch }) {
 
   return (
     <div>
-      <button onClick={() => dispatch({ type: 'SET_VIEW', view: 'projects' })} style={{ ...S.btnOutline, marginBottom: 16, fontSize: 13 }}>&larr; Back to Projects</button>
+      <Button variant="outline" size="sm" className="mb-4" onClick={() => dispatch({ type: 'SET_VIEW', view: 'projects' })}>&#8592; Back to Projects</Button>
 
       <div style={{ ...S.card, marginBottom: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700 }}>{project.name}</h1>
-            <p style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}>{project.client_name || 'No client'}</p>
+            <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', color: C.text }}>{project.name}</h1>
+            <p style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}><span style={{ fontWeight: 600, color: C.text }}>Client:</span> {project.client_name || 'No client'}</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <div style={{ textAlign: 'right' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+            <div className="flex items-center gap-2">
               <span style={S.badge(statusColors[project.status] || C.textDim)}>{project.status}</span>
-              {project.budget_cents && <p style={{ fontSize: 22, fontWeight: 700, color: C.proposal, marginTop: 4 }}>{fmt(project.budget_cents)}</p>}
+              <Button variant="outline" size="sm" onClick={openEdit}>Edit</Button>
+              <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => setShowDeleteConfirm(true)}>Delete</Button>
             </div>
-            <button onClick={openEdit} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px' }}>Edit</button>
-            <button onClick={() => setShowDeleteConfirm(true)} style={{ ...S.btnOutline, fontSize: 11, padding: '4px 10px', borderColor: C.danger + '44', color: C.danger }}>Delete</button>
+            {project.budget_cents && <p style={{ fontSize: 22, fontWeight: 700, color: C.proposal }}>{fmt(project.budget_cents)}</p>}
           </div>
         </div>
 
         {/* Status controls */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-          {['active', 'paused', 'completed', 'cancelled'].map((s) => (
-            <button key={s} onClick={() => handleStatusChange(s)} disabled={project.status === s}
-              style={{ ...S.btnOutline, fontSize: 11, padding: '4px 12px', borderColor: (statusColors[s] || C.textDim) + '44', color: project.status === s ? C.text : statusColors[s], background: project.status === s ? (statusColors[s] || C.textDim) + '22' : 'transparent', textTransform: 'capitalize', opacity: project.status === s ? 0.6 : 1 }}>
-              {s}
-            </button>
-          ))}
+        <div className="flex items-center gap-3 mt-3">
+          <span className="text-sm text-muted-foreground">Change status:</span>
+          <select value={project.status} onChange={(e) => handleStatusChange(e.target.value)}
+            className="h-9 rounded-lg border border-border bg-background text-sm text-foreground px-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 capitalize">
+            {['active', 'paused', 'completed', 'cancelled'].map((s) => (
+              <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            ))}
+          </select>
         </div>
 
         {project.scope_summary && <p style={{ color: C.textMuted, fontSize: 13, marginTop: 12, padding: 12, background: C.bg, borderRadius: 8 }}>{project.scope_summary}</p>}
 
         {/* Edit form */}
         {showEdit && editForm && (
-          <form onSubmit={handleEdit} className="fade-in" style={{ marginTop: 12, padding: 16, background: C.bg, borderRadius: 10, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <input style={S.input} placeholder="Project name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
-            <input style={S.input} placeholder="Description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-            <input style={S.input} type="number" step="0.01" placeholder="Budget ($)" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} />
-            <textarea style={{ ...S.input, minHeight: 60 }} placeholder="Scope summary" value={editForm.scope_summary} onChange={(e) => setEditForm({ ...editForm, scope_summary: e.target.value })} />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button type="submit" style={S.btn}>Save</button>
-              <button type="button" onClick={() => setShowEdit(false)} style={S.btnOutline}>Cancel</button>
+          <form onSubmit={handleEdit} className="fade-in mt-3 rounded-xl p-4 flex flex-col gap-3" style={{ background: C.bg }}>
+            <Input placeholder="Project name" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} required />
+            <ClientCombobox clients={state.clients} value={editForm.client_id} onChange={(id) => setEditForm({ ...editForm, client_id: id })} />
+            <Input placeholder="Description" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+            <Input type="number" step="0.01" placeholder="Budget ($)" value={editForm.budget} onChange={(e) => setEditForm({ ...editForm, budget: e.target.value })} />
+            <Textarea placeholder="Scope summary" value={editForm.scope_summary} onChange={(e) => setEditForm({ ...editForm, scope_summary: e.target.value })} className="min-h-[60px]" />
+            <div className="flex gap-2">
+              <Button type="submit">Save</Button>
+              <Button type="button" variant="outline" onClick={() => setShowEdit(false)}>Cancel</Button>
             </div>
           </form>
         )}
@@ -1257,14 +1474,15 @@ function ProjectDetail({ state, dispatch }) {
             { label: 'Draft Contract', msg: 'Draft a contract for this project with standard freelancer-friendly terms.', color: C.contract },
             { label: 'Check Scope', msg: 'Review the current scope status for this project and flag any scope creep risks.', color: C.scope },
           ].map((action) => (
-            <button key={action.label} onClick={() => {
+            <Button key={action.label} variant="outline" size="sm" onClick={() => {
               if (state.chatProjectId !== project.id) dispatch({ type: 'SET_CHAT_PROJECT', projectId: project.id });
               setShowChat(true);
               setTimeout(() => streamChat(action.msg, project.id, dispatch, new AbortController().signal), 150);
-            }} style={{ ...S.btnOutline, fontSize: 12, borderColor: action.color + '44', color: action.color }}>{action.label}</button>
+            }} style={{ borderColor: action.color + '44', color: action.color }}>{action.label}</Button>
           ))}
-          <button onClick={() => { if (state.chatProjectId !== project.id) dispatch({ type: 'SET_CHAT_PROJECT', projectId: project.id }); setShowChat(!showChat); }}
-            style={{ ...S.btn, fontSize: 12 }}>{showChat ? 'Hide Chat' : 'Open Chat'}</button>
+          <Button size="sm" onClick={() => { if (state.chatProjectId !== project.id) dispatch({ type: 'SET_CHAT_PROJECT', projectId: project.id }); setShowChat(!showChat); }}>
+            {showChat ? 'Hide Chat' : 'Open Chat'}
+          </Button>
         </div>
       </div>
 
@@ -1275,8 +1493,51 @@ function ProjectDetail({ state, dispatch }) {
         </div>
       )}
 
-      {/* Milestones */}
-      <MilestonePanel milestones={p.milestones || []} projectId={project.id} onRefresh={refresh} />
+      {/* Milestones + Payment Summary grid */}
+      <div className="grid gap-5" style={{ gridTemplateColumns: '3fr 1fr', alignItems: 'start' }}>
+        <MilestonePanel milestones={p.milestones || []} projectId={project.id} onRefresh={refresh} />
+
+        {/* Payment Summary */}
+        {(() => {
+          const invoices = p.invoices || [];
+          const paidCents = invoices.filter((i) => i.status === 'paid').reduce((s, i) => s + parseInt(i.total_cents || 0), 0);
+          const totalCents = project.budget_cents ? parseInt(project.budget_cents) : invoices.reduce((s, i) => s + parseInt(i.total_cents || 0), 0);
+          const remainingCents = Math.max(0, totalCents - paidCents);
+          return (
+            <Card>
+              <CardContent className="pt-5 pb-5">
+                <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-4">Payment Summary</p>
+                {totalCents || paidCents ? (
+                  <>
+                    <div className="flex flex-col gap-3">
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs text-muted-foreground">Total</p>
+                        <p className="text-sm font-bold text-foreground">{fmt(totalCents)}</p>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs text-muted-foreground">Paid</p>
+                        <p className="text-sm font-bold" style={{ color: C.success }}>{fmt(paidCents)}</p>
+                      </div>
+                      <Separator />
+                      <div className="flex justify-between items-center">
+                        <p className="text-xs text-muted-foreground">Remaining</p>
+                        <p className="text-sm font-bold" style={{ color: remainingCents > 0 ? C.warning : C.success }}>{fmt(remainingCents)}</p>
+                      </div>
+                    </div>
+                    {totalCents > 0 && (
+                      <div className="mt-4 h-1.5 rounded-full overflow-hidden" style={{ background: C.border }}>
+                        <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(100, (paidCents / totalCents) * 100)}%`, background: C.success }} />
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">No invoices yet</p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
+      </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
@@ -1290,7 +1551,7 @@ function ProjectDetail({ state, dispatch }) {
       </div>
 
       {/* Tab content */}
-      {activeTab.data.length === 0 && <p style={{ color: C.textDim, padding: 20 }}>No {activeTab.label.toLowerCase()} yet.</p>}
+      {activeTab.data.length === 0 && <p style={{ color: C.textDim, padding: 20, fontStyle: 'italic', textAlign: 'center' }}>No {activeTab.label.toLowerCase()} yet.</p>}
 
       {tab === 'proposals' && activeTab.data.map((doc) => (
         <CollapsibleDoc key={doc.id} doc={doc} color={C.proposal} type="proposal" onDelete={refresh}>
@@ -1350,9 +1611,45 @@ function ProjectDetail({ state, dispatch }) {
   );
 }
 
+// ─── Client Card ──────────────────────────────────────────────────
+function ClientCard({ client: c, onClick }) {
+  const initials = c.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+  return (
+    <Card className="cursor-pointer hover:border-primary/40 transition-all" onClick={onClick}>
+      <CardContent className="pt-5 pb-5">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0"
+            style={{ background: C.primary + '25', color: C.primary }}>
+            {initials}
+          </div>
+          <p className="font-semibold text-foreground">{c.name}</p>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {c.email && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Mail size={13} className="shrink-0" />
+              <span className="truncate">{c.email}</span>
+            </div>
+          )}
+          {c.company && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Building2 size={13} className="shrink-0" />
+              <span className="truncate">{c.company}</span>
+            </div>
+          )}
+          {c.notes && (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.notes}</p>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Clients View ─────────────────────────────────────────────────
 function ClientsView({ state, dispatch }) {
   const [form, setForm] = useState({ name: '', email: '', company: '', notes: '' });
+  const [deleteClientId, setDeleteClientId] = useState(null);
 
   useEffect(() => {
     dispatch({ type: 'SET_CLIENTS_LOADING' });
@@ -1378,7 +1675,6 @@ function ClientsView({ state, dispatch }) {
     dispatch({ type: 'SET_CLIENTS', clients });
   };
 
-  const [deleteClientId, setDeleteClientId] = useState(null);
   const handleDelete = async (id) => {
     await api(`/clients/${id}`, { method: 'DELETE' });
     setDeleteClientId(null);
@@ -1386,45 +1682,60 @@ function ClientsView({ state, dispatch }) {
     dispatch({ type: 'SET_CLIENTS', clients });
   };
 
+  const closeModal = () => dispatch({ type: 'SET_SHOW_CLIENT_FORM', show: false });
+
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Clients</h1>
-        <button onClick={() => openForm()} style={S.btn}>Add Client</button>
+      {/* Count + action row */}
+      <div className="flex items-center justify-between mb-6">
+        <p className="text-sm text-muted-foreground">
+          {state.clientsLoading ? 'Loading...' : `${state.clients.length} total client${state.clients.length !== 1 ? 's' : ''}`}
+        </p>
+        <Button onClick={() => openForm()}><Plus size={15} />Add Client</Button>
       </div>
 
-      {state.showClientForm && (
-        <form onSubmit={handleSave} style={{ ...S.card, marginBottom: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input style={S.input} placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-          <div style={{ display: 'flex', gap: 10 }}>
-            <input style={S.input} type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            <input style={S.input} placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
-          </div>
-          <textarea style={{ ...S.input, minHeight: 60 }} placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button type="submit" style={S.btn}>{state.editingClient ? 'Update' : 'Create'}</button>
-            <button type="button" onClick={() => dispatch({ type: 'SET_SHOW_CLIENT_FORM', show: false })} style={S.btnOutline}>Cancel</button>
-          </div>
-        </form>
+      {/* Card grid */}
+      {state.clients.length === 0 && !state.clientsLoading && (
+        <p className="text-muted-foreground italic text-center py-16">No clients yet. Add your first client to get started.</p>
       )}
-
-      {state.clientsLoading && <p style={{ color: C.textMuted }}>Loading...</p>}
-
-      <div style={{ ...S.card }}>
-        {state.clients.length === 0 && !state.clientsLoading && <p style={{ color: C.textDim, textAlign: 'center', padding: 20 }}>No clients yet. Add your first client to get started.</p>}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {state.clients.map((c) => (
-          <div key={c.id} style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</p>
-              <p style={{ fontSize: 12, color: C.textMuted }}>{[c.email, c.company].filter(Boolean).join(' \u00B7 ') || 'No details'}</p>
-            </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => openForm(c)} style={{ ...S.btnOutline, padding: '4px 12px', fontSize: 12 }}>Edit</button>
-              <button onClick={() => setDeleteClientId(c.id)} style={{ ...S.btnOutline, padding: '4px 12px', fontSize: 12, color: C.danger, borderColor: C.danger + '44' }}>Delete</button>
-            </div>
-          </div>
+          <ClientCard key={c.id} client={c} onClick={() => openForm(c)} />
         ))}
       </div>
+
+      {/* Add / Edit modal */}
+      {state.showClientForm && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000] p-4" onClick={closeModal}>
+          <Card className="fade-in w-full max-w-[460px]" onClick={(e) => e.stopPropagation()}>
+            <CardHeader>
+              <CardTitle>{state.editingClient ? 'Edit Client' : 'Add Client'}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleSave} className="flex flex-col gap-3">
+                <Input placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                <Input type="email" placeholder="Email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                <Input placeholder="Company" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
+                <Textarea placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="min-h-[80px]" />
+                <div className="flex items-center justify-between pt-1">
+                  {state.editingClient ? (
+                    <Button type="button" variant="outline"
+                      style={{ color: C.danger, borderColor: C.danger + '44' }}
+                      onClick={() => { closeModal(); setDeleteClientId(state.editingClient.id); }}>
+                      Delete Client
+                    </Button>
+                  ) : <span />}
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
+                    <Button type="submit">{state.editingClient ? 'Update' : <><Plus size={15} />Create</>}</Button>
+                  </div>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {deleteClientId && <ConfirmModal message="Delete this client?" onConfirm={() => handleDelete(deleteClientId)} onCancel={() => setDeleteClientId(null)} />}
     </div>
   );
@@ -1451,16 +1762,17 @@ function OnboardingView() {
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Getting Started</h1>
-      <p style={{ color: C.textMuted, fontSize: 14, marginBottom: 24 }}>Three things every new freelancer needs to know</p>
+      <p className="text-muted-foreground text-sm mb-6">Three things every new freelancer needs to know</p>
       {sections.map((s, i) => (
-        <div key={i} className="card-hover" style={{ ...S.card, marginBottom: 12, cursor: 'pointer' }} onClick={() => setOpen(open === i ? null : i)}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ fontSize: 16, fontWeight: 600 }}>{s.title}</h3>
-            <span style={{ color: C.textDim, fontSize: 18, transform: open === i ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>{'\u25BE'}</span>
-          </div>
-          {open === i && <p style={{ color: C.textMuted, fontSize: 14, lineHeight: 1.7, marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>{s.content}</p>}
-        </div>
+        <Card key={i} className="card-hover mb-3 cursor-pointer hover:border-primary/40" onClick={() => setOpen(open === i ? null : i)}>
+          <CardContent className="pt-5 pb-5">
+            <div className="flex justify-between items-center">
+              <h3 className="text-base font-semibold text-foreground">{s.title}</h3>
+              <span className="text-muted-foreground text-lg transition-transform duration-200" style={{ transform: open === i ? 'rotate(180deg)' : 'none' }}>{'\u25BE'}</span>
+            </div>
+            {open === i && <p className="text-muted-foreground text-sm leading-relaxed mt-3 pt-3 border-t border-border">{s.content}</p>}
+          </CardContent>
+        </Card>
       ))}
     </div>
   );
@@ -1491,36 +1803,37 @@ function KanbanView({ state, dispatch }) {
   }, []);
 
   const columns = [
-    { status: 'pending', label: 'Pending', color: C.textDim },
+    { status: 'pending', label: 'Pending', color: C.text },
     { status: 'active', label: 'In Progress', color: C.primary },
     { status: 'completed', label: 'Awaiting Approval', color: C.warning },
     { status: 'approved', label: 'Approved', color: C.success },
   ];
 
-  if (loading) return <p style={{ color: C.textMuted, padding: 40 }}>Loading milestones...</p>;
+  if (loading) return <p className="text-muted-foreground italic text-center p-10">Loading milestones...</p>;
 
   return (
     <div>
-      <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Milestone Board</h1>
-      <p style={{ color: C.textMuted, fontSize: 14, marginBottom: 24 }}>All milestones across active projects</p>
+      <p className="text-muted-foreground text-sm mb-6">All milestones across active projects</p>
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 1fr)`, gap: 16, minHeight: 400 }}>
         {columns.map((col) => {
           const items = milestones.filter((m) => m.status === col.status);
           return (
-            <div key={col.status} style={{ background: C.bg, borderRadius: 12, padding: 12, border: `1px solid ${C.border}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, paddingBottom: 8, borderBottom: `2px solid ${col.color}` }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: col.color }}>{col.label}</span>
+            <div key={col.status} className="rounded-xl p-3 border border-border" style={{ background: C.bg }}>
+              <div className="flex justify-between items-center mb-3 pb-2" style={{ borderBottom: `2px solid ${col.color}` }}>
+                <span className="text-sm font-semibold" style={{ color: col.color }}>{col.label}</span>
                 <span style={S.badge(col.color)}>{items.length}</span>
               </div>
-              {items.length === 0 && <p style={{ color: C.textDim, fontSize: 12, textAlign: 'center', padding: 20 }}>No milestones</p>}
+              {items.length === 0 && <p className="text-muted-foreground text-xs text-center py-5 italic">No milestones</p>}
               {items.map((m) => (
-                <div key={m.id} className="card-hover" style={{ ...S.card, padding: 12, marginBottom: 8, cursor: 'pointer' }}
+                <Card key={m.id} className="card-hover mb-2 cursor-pointer hover:border-primary/40"
                   onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' }); api(`/projects/${m.project_id}`).then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data })); }}>
-                  <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>{m.title}</p>
-                  <p style={{ fontSize: 11, color: C.textMuted }}>{m.project_name}</p>
-                  {m.amount_cents > 0 && <p style={{ fontSize: 12, color: C.accent, marginTop: 4 }}>{fmt(m.amount_cents)}</p>}
-                  {m.approval_type === 'auto' && <span style={{ fontSize: 9, color: C.textDim, background: C.surface, padding: '1px 6px', borderRadius: 8, marginTop: 4, display: 'inline-block' }}>Auto</span>}
-                </div>
+                  <CardContent className="p-3">
+                    <p className="text-sm font-semibold mb-1 text-foreground">{m.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{m.project_name}</p>
+                    {m.amount_cents > 0 && <p className="text-xs mt-1" style={{ color: C.accent }}>{fmt(m.amount_cents)}</p>}
+                    {m.approval_type === 'auto' && <span className="text-[9px] text-muted-foreground rounded-full px-1.5 py-px mt-1 inline-block" style={{ background: C.surface }}>Auto</span>}
+                  </CardContent>
+                </Card>
               ))}
             </div>
           );
@@ -1557,58 +1870,44 @@ function ActivityLogView({ state, dispatch }) {
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700 }}>Activity Log</h1>
-        <button onClick={() => {
+      <div className="flex justify-end mb-5">
+        <Button onClick={() => {
           const exportData = { exported_at: new Date().toISOString(), summary, logs: logs.map((l) => ({ ...l, est_cost: estimateCost(l) })) };
           downloadJSON(exportData, `activity-log-${new Date().toISOString().slice(0, 10)}.json`);
-        }} style={S.btn} disabled={logs.length === 0}>Export Logs</button>
+        }} disabled={logs.length === 0}>Export Logs</Button>
       </div>
 
-      {/* Summary cards */}
       {summary && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 24 }}>
-          <div style={{ ...S.card, borderTop: `3px solid ${C.accent}`, padding: 16 }}>
-            <p style={{ fontSize: 11, color: C.textMuted }}>Total Calls</p>
-            <p style={{ fontSize: 24, fontWeight: 700 }}>{summary.total_logs}</p>
-          </div>
-          <div style={{ ...S.card, borderTop: `3px solid ${C.primary}`, padding: 16 }}>
-            <p style={{ fontSize: 11, color: C.textMuted }}>Total Tokens</p>
-            <p style={{ fontSize: 24, fontWeight: 700 }}>{(summary.total_tokens || 0).toLocaleString()}</p>
-          </div>
-          <div style={{ ...S.card, borderTop: `3px solid ${C.success}`, padding: 16 }}>
-            <p style={{ fontSize: 11, color: C.textMuted }}>Total Time</p>
-            <p style={{ fontSize: 24, fontWeight: 700 }}>{((summary.total_duration_ms || 0) / 1000).toFixed(1)}s</p>
-          </div>
-          <div style={{ ...S.card, borderTop: `3px solid ${C.warning}`, padding: 16 }}>
-            <p style={{ fontSize: 11, color: C.textMuted }}>Est. Cost</p>
-            <p style={{ fontSize: 24, fontWeight: 700 }}>${logs.reduce((s, l) => s + parseFloat(estimateCost(l)), 0).toFixed(2)}</p>
-          </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <KPICard label="Total Calls" value={summary.total_logs} color={C.accent} icon={Activity} />
+          <KPICard label="Total Tokens" value={(summary.total_tokens || 0).toLocaleString()} color={C.primary} icon={Cpu} />
+          <KPICard label="Total Time" value={`${((summary.total_duration_ms || 0) / 1000).toFixed(1)}s`} color={C.textMuted} icon={Timer} />
+          <KPICard label="Est. Cost" value={`$${logs.reduce((s, l) => s + parseFloat(estimateCost(l)), 0).toFixed(2)}`} color={C.textMuted} icon={DollarSign} />
         </div>
       )}
 
-      {/* Agent breakdown */}
       {summary?.agent_counts && (
-        <div style={{ ...S.card, marginBottom: 20, padding: 16 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Agent Usage</p>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {agents.filter((a) => summary.agent_counts[a]).map((a) => (
-              <button key={a} onClick={() => setFilter(filter === a ? '' : a)}
-                style={{ ...S.badge(AGENT_COLORS[a] || C.textDim), cursor: 'pointer', border: filter === a ? `2px solid ${AGENT_COLORS[a]}` : '2px solid transparent', padding: '4px 12px' }}>
-                {AGENT_NAMES[a] || a}: {summary.agent_counts[a]}
-              </button>
-            ))}
-            {filter && <button onClick={() => setFilter('')} style={{ ...S.btnOutline, padding: '4px 10px', fontSize: 11 }}>Clear filter</button>}
-          </div>
-        </div>
+        <Card className="mb-5">
+          <CardContent className="pt-5">
+            <p className="text-sm font-semibold mb-3 text-foreground">Agent Usage</p>
+            <div className="flex gap-2 flex-wrap">
+              {agents.filter((a) => summary.agent_counts[a]).map((a) => (
+                <button key={a} onClick={() => setFilter(filter === a ? '' : a)}
+                  className="cursor-pointer transition-all" style={{ ...S.badge(AGENT_COLORS[a] || C.textDim), border: filter === a ? `2px solid ${AGENT_COLORS[a]}` : '2px solid transparent' }}>
+                  {AGENT_NAMES[a] || a}: {summary.agent_counts[a]}
+                </button>
+              ))}
+              {filter && <Button variant="outline" size="sm" className="h-7 text-[11px]" onClick={() => setFilter('')}>Clear filter</Button>}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
-      {/* Log entries */}
-      {loading && <p style={{ color: C.textMuted }}>Loading...</p>}
+      {loading && <p className="text-muted-foreground italic text-center">Loading...</p>}
       {logs.map((log) => (
         <ActivityLogEntry key={log.id} log={log} estimateCost={estimateCost} />
       ))}
-      {!loading && logs.length === 0 && <p style={{ color: C.textDim, textAlign: 'center', padding: 40 }}>No agent activity yet.</p>}
+      {!loading && logs.length === 0 && <p className="text-muted-foreground italic text-center py-10">No agent activity yet.</p>}
     </div>
   );
 }
@@ -1619,45 +1918,47 @@ function ActivityLogEntry({ log, estimateCost }) {
   const totalTokens = (log.input_tokens || 0) + (log.output_tokens || 0);
 
   return (
-    <div className="card-hover" style={{ ...S.card, marginBottom: 10, padding: 14, cursor: 'pointer' }} onClick={() => setOpen(!open)}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <span style={{ color: C.textDim, fontSize: 11 }}>{open ? '\u25BC' : '\u25B6'}</span>
-        <span style={S.badge(color)}>{AGENT_NAMES[log.agent] || log.agent}</span>
-        {log.project_name && <span style={{ fontSize: 12, color: C.textMuted }}>{log.project_name}</span>}
-        <span style={{ marginLeft: 'auto', display: 'flex', gap: 12, fontSize: 12, color: C.textDim }}>
-          <span>{(log.duration_ms / 1000).toFixed(1)}s</span>
-          <span>{totalTokens.toLocaleString()} tok</span>
-          <span>${estimateCost(log)}</span>
-          <span>{timeAgo(log.created_at)}</span>
-        </span>
-      </div>
-      {open && (
-        <div className="fade-in" style={{ marginTop: 12, background: C.bg, borderRadius: 10, padding: 14 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <div>
-              <p style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>Input Tokens</p>
-              <p style={{ fontSize: 16, fontWeight: 600 }}>{(log.input_tokens || 0).toLocaleString()}</p>
-              <div style={{ height: 4, background: C.border, borderRadius: 2, marginTop: 4 }}>
-                <div style={{ height: 4, background: C.primary, borderRadius: 2, width: `${Math.min(100, (log.input_tokens / 20000) * 100)}%` }} />
-              </div>
-            </div>
-            <div>
-              <p style={{ fontSize: 11, color: C.textDim, marginBottom: 4 }}>Output Tokens</p>
-              <p style={{ fontSize: 16, fontWeight: 600 }}>{(log.output_tokens || 0).toLocaleString()}</p>
-              <div style={{ height: 4, background: C.border, borderRadius: 2, marginTop: 4 }}>
-                <div style={{ height: 4, background: C.accent, borderRadius: 2, width: `${Math.min(100, (log.output_tokens / 5000) * 100)}%` }} />
-              </div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', gap: 16, marginTop: 12, fontSize: 12, color: C.textMuted }}>
-            <span>Model: <strong style={{ color: C.text }}>{log.model}</strong></span>
-            <span>Duration: <strong style={{ color: C.text }}>{(log.duration_ms / 1000).toFixed(1)}s</strong></span>
-            <span>Cost: <strong style={{ color: C.success }}>${estimateCost(log)}</strong></span>
-            <span>Time: <strong style={{ color: C.text }}>{new Date(log.created_at).toLocaleString()}</strong></span>
-          </div>
+    <Card className="card-hover mb-2.5 cursor-pointer hover:border-primary/40" onClick={() => setOpen(!open)}>
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-center gap-2.5">
+          <span className="text-muted-foreground text-xs">{open ? '\u25BC' : '\u25B6'}</span>
+          <span style={S.badge(color)}>{AGENT_NAMES[log.agent] || log.agent}</span>
+          {log.project_name && <span className="text-xs text-muted-foreground">{log.project_name}</span>}
+          <span className="ml-auto flex gap-3 text-xs text-muted-foreground">
+            <span>{(log.duration_ms / 1000).toFixed(1)}s</span>
+            <span>{totalTokens.toLocaleString()} tok</span>
+            <span>${estimateCost(log)}</span>
+            <span>{timeAgo(log.created_at)}</span>
+          </span>
         </div>
-      )}
-    </div>
+        {open && (
+          <div className="fade-in mt-3 rounded-xl p-3.5" style={{ background: C.bg }}>
+            <div className="grid grid-cols-2 gap-2.5 mb-3">
+              <div>
+                <p className="text-[11px] text-muted-foreground mb-1">Input Tokens</p>
+                <p className="text-base font-semibold text-foreground">{(log.input_tokens || 0).toLocaleString()}</p>
+                <div className="h-1 rounded-full mt-1" style={{ background: C.border }}>
+                  <div className="h-1 rounded-full" style={{ background: C.primary, width: `${Math.min(100, (log.input_tokens / 20000) * 100)}%` }} />
+                </div>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted-foreground mb-1">Output Tokens</p>
+                <p className="text-base font-semibold text-foreground">{(log.output_tokens || 0).toLocaleString()}</p>
+                <div className="h-1 rounded-full mt-1" style={{ background: C.border }}>
+                  <div className="h-1 rounded-full" style={{ background: C.accent, width: `${Math.min(100, (log.output_tokens / 5000) * 100)}%` }} />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-4 text-xs text-muted-foreground flex-wrap">
+              <span>Model: <strong className="text-foreground">{log.model}</strong></span>
+              <span>Duration: <strong className="text-foreground">{(log.duration_ms / 1000).toFixed(1)}s</strong></span>
+              <span>Cost: <strong style={{ color: C.success }}>${estimateCost(log)}</strong></span>
+              <span>Time: <strong className="text-foreground">{new Date(log.created_at).toLocaleString()}</strong></span>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1729,7 +2030,7 @@ function ClientPortalView({ token }) {
         </div>
 
         {/* Progress */}
-        <div style={{ background: '#1A1D27', borderRadius: 14, padding: 22, border: '1px solid #2E3346', marginBottom: 24 }}>
+        <div style={{ background: '#0B1120', borderRadius: 14, padding: 22, border: '1px solid #2E3346', marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#8B92A8', marginBottom: 8 }}>
             <span>Project Progress</span>
             <span>{progress.approved} of {progress.total} milestones approved ({pct}%)</span>
@@ -1748,7 +2049,7 @@ function ClientPortalView({ token }) {
               {i < milestones.length - 1 && <div style={{ width: 2, flex: 1, background: m.status === 'approved' ? '#00B89444' : '#2E3346', margin: '6px 0' }} />}
             </div>
             {/* Content */}
-            <div style={{ flex: 1, background: '#1A1D27', borderRadius: 12, padding: 18, border: `1px solid ${m.status === 'completed' ? '#FDCB6E44' : '#2E3346'}`, marginBottom: 12 }}>
+            <div style={{ flex: 1, background: '#0B1120', borderRadius: 12, padding: 18, border: `1px solid ${m.status === 'completed' ? '#FDCB6E44' : '#2E3346'}`, marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                   <span style={{ fontWeight: 600, fontSize: 15 }}>{m.title}</span>
@@ -1788,13 +2089,19 @@ function ClientPortalView({ token }) {
         ))}
 
         {milestones.length === 0 && (
-          <div style={{ background: '#1A1D27', borderRadius: 14, padding: 40, border: '1px solid #2E3346', textAlign: 'center' }}>
+          <div style={{ background: '#0B1120', borderRadius: 14, padding: 40, border: '1px solid #2E3346', textAlign: 'center' }}>
             <p style={{ color: '#8B92A8' }}>No milestones have been added to this project yet.</p>
           </div>
         )}
 
         {/* Footer */}
-        <p style={{ textAlign: 'center', color: '#5A6178', fontSize: 11, marginTop: 32 }}>Powered by BackOffice Agent</p>
+        <div style={{ position: 'relative', marginTop: 48 }}>
+          <div style={{ position: 'absolute', top: -14, left: 24, width: 72, height: 28, background: 'rgba(148,163,184,0.15)', backdropFilter: 'blur(4px)', clipPath: 'polygon(5% 0%, 95% 2%, 100% 100%, 0% 98%)', transform: 'rotate(-6deg)', zIndex: 10 }} />
+          <div style={{ position: 'absolute', top: -14, right: 24, width: 72, height: 28, background: 'rgba(148,163,184,0.15)', backdropFilter: 'blur(4px)', clipPath: 'polygon(5% 0%, 95% 2%, 100% 100%, 0% 98%)', transform: 'rotate(6deg)', zIndex: 10 }} />
+          <div style={{ background: '#0F172A', border: '1px solid #1E293B', borderRadius: 16, padding: '20px 32px', textAlign: 'center' }}>
+            <p style={{ color: '#475569', fontSize: 12 }}>Powered by <span style={{ color: '#60A5FA', fontWeight: 600 }}>BackOffice Agent</span></p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1802,6 +2109,7 @@ function ClientPortalView({ token }) {
 
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [showLanding, setShowLanding] = useState(true);
 
   // Portal detection: render public view if URL matches /portal/:token
   const portalMatch = window.location.pathname.match(/^\/portal\/([a-f0-9]{64})$/);
@@ -1819,10 +2127,11 @@ export default function App() {
   }, []);
 
   const globalStyles = `
-    .card-hover:hover { border-color: ${C.primary}33 !important; box-shadow: 0 0 24px ${C.primary}0d; }
+    .card-hover:hover { border-color: rgba(37,99,235,0.4) !important; box-shadow: 0 0 24px rgba(37,99,235,0.12); }
     .btn-primary:hover { background: ${C.primaryHover} !important; transform: translateY(-1px); }
-    .btn-outline:hover { background: ${C.surfaceHover} !important; border-color: ${C.textDim} !important; color: ${C.text} !important; }
+    .btn-outline:hover { background: rgba(37,99,235,0.08) !important; border-color: rgba(37,99,235,0.6) !important; color: #93C5FD !important; }
     .nav-item:hover { background: ${C.surfaceHover}; }
+    input:focus, textarea:focus, select:focus { border-color: #2563EB !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important; outline: none; }
   `;
 
   // Error boundary for debugging
@@ -1831,7 +2140,10 @@ export default function App() {
     window.addEventListener('error', (e) => console.error('RENDER ERROR:', e.message, e.filename, e.lineno));
   }
 
-  if (!state.user) return <><style>{globalStyles}</style><AuthView state={state} dispatch={dispatch} /></>;
+  if (!state.user) {
+    if (showLanding) return <LandingView onGetStarted={() => setShowLanding(false)} />;
+    return <><style>{globalStyles}</style><AuthView state={state} dispatch={dispatch} /></>;
+  }
 
   const viewMap = {
     dashboard: DashboardView,
@@ -1848,11 +2160,14 @@ export default function App() {
   return (
     <>
       <style>{globalStyles}</style>
-      <div style={{ display: 'flex', minHeight: '100vh', background: C.bg, color: C.text }}>
+      <div className="flex min-h-screen" style={{ background: C.bg, color: C.text }}>
         <Sidebar state={state} dispatch={dispatch} />
-        <main style={{ flex: 1, padding: 24, overflowY: 'auto', maxHeight: '100vh' }}>
-          <View state={state} dispatch={dispatch} />
-        </main>
+        <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
+          <TopHeader state={state} />
+          <main className="flex-1 overflow-y-auto p-8 lg:p-10">
+            <View state={state} dispatch={dispatch} />
+          </main>
+        </div>
       </div>
     </>
   );

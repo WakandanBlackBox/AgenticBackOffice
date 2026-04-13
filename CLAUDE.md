@@ -95,3 +95,61 @@ npm run db:migrate    # Run schema.sql
 - Cost estimates use `estimateCost()` in dispatcher and are included in `agent_complete` events
 - When adding new tools, keep `input_schema` minimal -- every property adds to cached tool token count
 - When adding new agents, follow the compressed prompt pattern in `agent-config.js`
+
+## Design System
+
+When building new screens or UI, follow the design system in `/reference/landing-design/`. Read the reference components before building anything visual.
+
+### Core Aesthetic
+- Dark-first: page bg `#060A14`, surface bg `#0B1120`, borders `#1E293B`
+- Blue accent family: primary `#2563EB`, secondary `#1D4ED8`, light `#3B82F6`
+- Text: headings `#E2E8F0`, body `#94A3B8`, muted `#475569`
+- Font: Plus Jakarta Sans (400/500/600/700/800) -- import from Google Fonts
+- Heading letter-spacing: `-0.02em` via inline style
+
+### Layout Rules
+- All sections use `.section-padding` (`py-24 md:py-28 lg:py-32`)
+- Container max-width 1200px, centered, 1.5rem padding
+- Section header: centered h2 + subtitle `max-w-xl mx-auto`, `mb-16` to content below
+- Use `<span className="text-gradient-blue">` for keyword emphasis in headings
+- Grids: 2-col (`gap-12`), 3-col (`gap-6`), asymmetric (`grid-cols-[1fr_2fr]`)
+
+### Card Pattern
+- `rounded-[16px]` bg `#0B1120` border `1px solid #1E293B`
+- Padding `p-6` or `p-8`, apply `.card-shadow` utility class
+- Hover: `hover:-translate-y-1 transition-all`
+
+### Icon Box Pattern
+- `w-12 h-12 rounded-lg flex items-center justify-center` bg `rgba(37,99,235,0.15)`
+- Icon: `size={24} className="text-blue-primary"`, `mb-5` spacing to heading
+
+### Animation Rules (Framer Motion)
+- Standard entrance: `initial={{ opacity: 0, y: 20 }}` / `whileInView={{ opacity: 1, y: 0 }}` / `viewport={{ once: true }}` / `transition={{ duration: 0.5 }}`
+- Stagger children: add `delay: 0.1` increments per element
+- Hero/above-fold: use `animate` not `whileInView` (loads immediately)
+- Split layouts: `x: -30` left side, `x: 30` right side
+- CTA lift on hover: `hover:-translate-y-0.5`
+
+### Button Styles
+- Primary CTA: `bg-blue-primary hover:bg-blue-secondary text-white rounded-lg px-8 py-6 font-semibold glow-blue hover:-translate-y-0.5`
+- Outline: `border-blue-primary/50 text-blue-primary hover:bg-blue-primary/10 rounded-lg`
+- Nav pill CTA: `bg-white text-dark-base rounded-full px-5 py-2`
+
+### Glass / Blur
+- Navbar: `backdrop-blur-xl bg-white/[0.06] ring-1 ring-white/[0.08] rounded-full`
+- Glass cards: `backdrop-blur-sm` with semi-transparent dark bg
+
+### Gradients
+- Hero bg: `radial-gradient(ellipse 80% 60% at 50% 0%, rgba(37,99,235,0.22) 0%, rgba(11,17,32,0.6) 50%, #060A14 100%)`
+- CTA bg: `radial-gradient(ellipse 70% 50% at 50% 50%, rgba(37,99,235,0.18) 0%, #060A14 100%)`
+- Text gradient: `.text-gradient-blue` utility (defined in `reference/landing-design/index.css`)
+
+### Reference Files
+- `reference/landing-design/tailwind.config.ts` -- full theme tokens, merge into project Tailwind config
+- `reference/landing-design/index.css` -- CSS variables, utility classes (`.glow-blue`, `.card-shadow`, `.section-padding`, `.text-gradient-blue`, `.bg-hero-gradient`), merge into project CSS
+- `reference/landing-design/HeroSection.tsx` -- hero layout, staggered load, primary CTA
+- `reference/landing-design/FeatureStrip.tsx` -- 3-col card grid, icon box pattern
+- `reference/landing-design/AlternatingFeatures.tsx` -- 2-col split, scroll timeline, glowing dots
+- `reference/landing-design/ShowcaseSection.tsx` -- glass card, chat mockup, backdrop-blur
+- `reference/landing-design/Navbar.tsx` -- glass pill nav, scroll-collapse, mobile menu
+- `reference/landing-design/deps.md` -- required npm packages

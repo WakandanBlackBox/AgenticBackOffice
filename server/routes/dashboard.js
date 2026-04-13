@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.get('/', async (req, res) => {
   const uid = req.user.id;
 
-  const [projects, invoiceStats, recentActivity, scopeEvents, agentStats] = await Promise.all([
+  const [projects, invoiceStats, recentActivity, scopeEvents, agentStats, clientCount, upcomingMilestones] = await Promise.all([
     // Active projects with client info
     db.many(
       `SELECT p.id, p.name, p.status, p.budget_cents, p.end_date, c.name AS client_name
@@ -45,6 +45,19 @@ router.get('/', async (req, res) => {
          SUM(input_tokens) AS total_input_tokens, SUM(output_tokens) AS total_output_tokens
        FROM agent_logs WHERE user_id = $1 AND created_at > now() - interval '30 days'
        GROUP BY agent`, [uid]
+    ),
+    // Total clients
+    db.one(`SELECT COUNT(*) AS total FROM clients WHERE user_id = $1`, [uid]),
+    // Upcoming milestones across active projects
+    db.many(
+      `SELECT m.id, m.title, m.status, m.amount_cents, p.name AS project_name, p.id AS project_id
+       FROM milestones m
+       JOIN projects p ON m.project_id = p.id
+       WHERE m.user_id = $1 AND p.status = 'active' AND m.status IN ('pending', 'active', 'completed')
+       ORDER BY
+         CASE m.status WHEN 'active' THEN 1 WHEN 'completed' THEN 2 WHEN 'pending' THEN 3 END,
+         m.created_at ASC
+       LIMIT 8`, [uid]
     )
   ]);
 
@@ -54,12 +67,14 @@ router.get('/', async (req, res) => {
     kpis: {
       active_projects: projects.length,
       pipeline_cents: pipelineValue,
+      total_clients: parseInt(clientCount.total),
       paid_cents: parseInt(invoiceStats.paid_cents),
       outstanding_cents: parseInt(invoiceStats.outstanding_cents),
       overdue_cents: parseInt(invoiceStats.overdue_cents),
       overdue_count: parseInt(invoiceStats.overdue_count)
     },
     projects,
+    upcoming_milestones: upcomingMilestones,
     recent_activity: recentActivity,
     scope_events: scopeEvents,
     agent_stats: agentStats
