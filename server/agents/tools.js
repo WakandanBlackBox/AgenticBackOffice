@@ -1,4 +1,5 @@
 import db from '../db.js';
+import { KNOWLEDGE, listKnowledgeTopics } from './knowledge.js';
 
 // Tool definitions for Claude tool_use -- each returns { success, data } or { success: false, error }
 
@@ -408,6 +409,29 @@ const TOOL_DEFS = {
     }
   },
 
+  // === DOMAIN KNOWLEDGE ===
+  // Just-in-time RAG-without-embeddings. Agents call this to pull a focused
+  // body of expertise on demand — keeps system prompts lean while letting
+  // each agent reach for deep domain heuristics when the situation warrants.
+  read_knowledge: {
+    name: 'read_knowledge',
+    description: 'Pull a focused body of domain expertise on demand. Topics: pricing_psychology, proposal_structure, contract_landmines, contract_protective_clauses, scope_creep_phrases, scope_creep_patterns, invoice_collections, invoice_structure, finance_health_signals. Use ONE topic per call, only when relevant.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'Topic key — see description for full list' }
+      },
+      required: ['topic']
+    },
+    fn: async (args) => {
+      const body = KNOWLEDGE[args.topic];
+      if (!body) {
+        return { success: false, error: `Unknown topic "${args.topic}". Available: ${listKnowledgeTopics().join(', ')}` };
+      }
+      return { success: true, data: { topic: args.topic, body } };
+    }
+  },
+
   // === SCOPE GUARDIAN TOOLS ===
   get_contract_scope: {
     name: 'get_contract_scope',
@@ -527,7 +551,9 @@ const TOOL_DEFS = {
          ORDER BY p.created_at DESC`,
         [userId]
       );
-      const total_pipeline = projects.reduce((sum, p) => sum + (p.budget_cents || 0), 0);
+      // PG returns BIGINT as a JS string. Coerce to Number before summing or
+      // we get string concatenation: "0" + "600000" + "1500000" = "06000001500000".
+      const total_pipeline = projects.reduce((sum, p) => sum + (Number(p.budget_cents) || 0), 0);
       return { success: true, data: { projects, total_pipeline_cents: total_pipeline, active_count: projects.length } };
     }
   }
