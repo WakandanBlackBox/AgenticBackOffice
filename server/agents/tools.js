@@ -125,10 +125,11 @@ const TOOL_DEFS = {
         notes: args.notes
       };
       const row = await db.one(
-        'INSERT INTO proposals (project_id, user_id, content) VALUES ($1, $2, $3) RETURNING id, status, created_at',
+        `INSERT INTO proposals (project_id, user_id, content, status, requires_approval)
+         VALUES ($1, $2, $3, 'pending_approval', TRUE) RETURNING id, status, created_at`,
         [args.project_id, userId, JSON.stringify(content)]
       );
-      return { success: true, data: row };
+      return { success: true, data: { ...row, awaiting_approval: true } };
     }
   },
 
@@ -165,25 +166,32 @@ const TOOL_DEFS = {
     },
     fn: async (args, userId) => {
       const row = await db.one(
-        'INSERT INTO invoices (project_id, user_id, line_items, total_cents, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING id, status, created_at',
+        `INSERT INTO invoices (project_id, user_id, line_items, total_cents, due_date, status, requires_approval)
+         VALUES ($1, $2, $3, $4, $5, 'pending_approval', TRUE) RETURNING id, status, created_at`,
         [args.project_id, userId, JSON.stringify(args.line_items), args.total_cents, args.due_date || null]
       );
-      return { success: true, data: row };
+      return { success: true, data: { ...row, awaiting_approval: true } };
     }
   },
 
   update_invoice_status: {
     name: 'update_invoice_status',
-    description: 'Update an invoice status (draft, sent, paid, overdue).',
+    // Agents cannot mark an invoice as 'sent' or 'paid' — those transitions are
+    // owner-only and go through POST /api/drafts/invoices/:id/send + Stripe webhook (Phase 2).
+    description: 'Update an invoice to draft or overdue. Agents cannot send or mark paid — that requires owner approval.',
     input_schema: {
       type: 'object',
       properties: {
         invoice_id: { type: 'string', description: 'Invoice UUID' },
-        status: { type: 'string', enum: ['draft', 'sent', 'paid', 'overdue'] }
+        status: { type: 'string', enum: ['draft', 'overdue'] }
       },
       required: ['invoice_id', 'status']
     },
     fn: async (args, userId) => {
+      const ALLOWED_AGENT_STATUSES = ['draft', 'overdue'];
+      if (!ALLOWED_AGENT_STATUSES.includes(args.status)) {
+        return { success: false, error: `Agents cannot set invoice status to "${args.status}". Allowed: ${ALLOWED_AGENT_STATUSES.join(', ')}. To send, the freelancer must approve via the Drafts inbox.` };
+      }
       const row = await db.one(
         'UPDATE invoices SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING id, status',
         [args.status, args.invoice_id, userId]
@@ -228,10 +236,11 @@ const TOOL_DEFS = {
       const content = args.content || {};
       const serialized = typeof content === 'string' ? content : JSON.stringify(content);
       const row = await db.one(
-        'INSERT INTO contracts (project_id, user_id, content, flags) VALUES ($1, $2, $3, $4) RETURNING id, status, created_at',
+        `INSERT INTO contracts (project_id, user_id, content, flags, status, requires_approval)
+         VALUES ($1, $2, $3, $4, 'pending_approval', TRUE) RETURNING id, status, created_at`,
         [args.project_id, userId, serialized, JSON.stringify(args.flags || [])]
       );
-      return { success: true, data: row };
+      return { success: true, data: { ...row, awaiting_approval: true } };
     }
   },
 
@@ -254,6 +263,38 @@ const TOOL_DEFS = {
       const flags = [...(contract.flags || []), { clause: args.clause_title, severity: args.severity, explanation: args.explanation }];
       await db.query('UPDATE contracts SET flags = $1 WHERE id = $2 AND user_id = $3', [JSON.stringify(flags), args.contract_id, userId]);
       return { success: true, data: { flagged: args.clause_title, severity: args.severity } };
+    }
+  },
+
+  // === TRUST LAYER ===
+  set_confidence: {
+    name: 'set_confidence',
+    description: 'Score your own output 0.0-1.0 and explain the reasoning. Call this AFTER creating a draft (proposal, invoice, or contract) so the freelancer can see how sure you are before approving. Score < 0.7 signals "needs careful review."',
+    input_schema: {
+      type: 'object',
+      properties: {
+        resource_type: { type: 'string', enum: ['proposal', 'invoice', 'contract'] },
+        resource_id: { type: 'string', description: 'UUID returned from save_proposal / create_invoice / save_contract' },
+        score: { type: 'number', description: 'Confidence between 0.0 (very uncertain) and 1.0 (highly confident)' },
+        reasoning: { type: 'string', description: 'Brief explanation: what you used, what was missing, what to double-check.' }
+      },
+      required: ['resource_type', 'resource_id', 'score', 'reasoning']
+    },
+    fn: async (args, userId) => {
+      const raw = Number(args.score);
+      if (!Number.isFinite(raw)) {
+        return { success: false, error: `set_confidence requires a finite number 0.0-1.0, got "${args.score}"` };
+      }
+      const score = Math.max(0, Math.min(1, raw));
+      const tableMap = { proposal: 'proposals', invoice: 'invoices', contract: 'contracts' };
+      const table = tableMap[args.resource_type];
+      if (!table) return { success: false, error: 'Invalid resource_type' };
+      const row = await db.one(
+        `UPDATE ${table} SET confidence = $1 WHERE id = $2 AND user_id = $3 RETURNING id, status, confidence`,
+        [score, args.resource_id, userId]
+      );
+      if (!row) return { success: false, error: `${args.resource_type} not found` };
+      return { success: true, data: { ...row, reasoning: args.reasoning, requires_review: score < 0.7 } };
     }
   },
 

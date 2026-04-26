@@ -133,3 +133,71 @@ CREATE TABLE IF NOT EXISTS share_tokens (
 
 CREATE INDEX IF NOT EXISTS idx_milestones_project ON milestones(project_id, position);
 CREATE INDEX IF NOT EXISTS idx_share_tokens_token ON share_tokens(token);
+
+-- =============================================================================
+-- ALTERs (idempotent) — evolve existing tables for the trust + approval layer.
+-- Phase 1B of judge-feedback-integration-plan.md.
+-- These run on every migrate; ADD COLUMN IF NOT EXISTS is a no-op on subsequent
+-- runs. Status CHECK changes use DROP CONSTRAINT IF EXISTS + ADD CONSTRAINT so
+-- they're idempotent too.
+-- =============================================================================
+
+-- Proposals: add approval lifecycle + confidence
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS confidence NUMERIC(3,2);
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id);
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE proposals DROP CONSTRAINT IF EXISTS proposals_status_check;
+ALTER TABLE proposals ADD CONSTRAINT proposals_status_check
+  CHECK (status IN ('draft','pending_approval','sent','accepted','rejected'));
+
+-- Invoices: add approval lifecycle + paid timestamp + confidence
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS confidence NUMERIC(3,2);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id);
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ;
+ALTER TABLE invoices DROP CONSTRAINT IF EXISTS invoices_status_check;
+ALTER TABLE invoices ADD CONSTRAINT invoices_status_check
+  CHECK (status IN ('draft','pending_approval','sent','paid','overdue'));
+
+-- Contracts: add approval lifecycle + confidence
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS confidence NUMERIC(3,2);
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS requires_approval BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id);
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE contracts ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
+ALTER TABLE contracts DROP CONSTRAINT IF EXISTS contracts_status_check;
+ALTER TABLE contracts ADD CONSTRAINT contracts_status_check
+  CHECK (status IN ('draft','pending_approval','sent','signed'));
+
+-- Users: onboarding tour completion timestamp
+ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded_at TIMESTAMPTZ;
+
+-- =============================================================================
+-- Audit log — resource lifecycle (draft -> approve -> send), distinct from
+-- agent_logs which records agent runs. actor_type encodes the BackOffice RBAC
+-- model: owner | agent | client_portal | approver (reserved).
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  actor_type TEXT NOT NULL CHECK (actor_type IN ('owner','agent','client_portal','approver')),
+  actor_id TEXT,
+  action TEXT NOT NULL,
+  resource_type TEXT NOT NULL CHECK (resource_type IN ('proposal','invoice','contract','milestone','email_draft','memory')),
+  resource_id UUID,
+  before_state JSONB,
+  after_state JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_user_created ON audit_log(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_log_resource ON audit_log(resource_type, resource_id);
+
+-- Indexes for the new approval-flow queries (drafts inbox, ROI)
+CREATE INDEX IF NOT EXISTS idx_proposals_user_status ON proposals(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_contracts_user_status ON contracts(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_invoices_user_paid ON invoices(user_id, paid_at);
