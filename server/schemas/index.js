@@ -69,7 +69,10 @@ export const generateInsightSchema = z.object({
 // Chat
 export const chatSchema = z.object({
   message: z.string().min(1).max(5000),
-  project_id: z.string().uuid().optional()
+  // .nullish() = accepts undefined OR null. The client sends project_id: null
+  // when "All projects" is selected (no specific project context); .optional()
+  // alone rejects null and 400s the request.
+  project_id: z.string().uuid().nullish()
 });
 
 // Milestones

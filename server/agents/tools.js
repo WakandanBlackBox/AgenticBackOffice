@@ -551,7 +551,9 @@ const TOOL_DEFS = {
          ORDER BY p.created_at DESC`,
         [userId]
       );
-      const total_pipeline = projects.reduce((sum, p) => sum + (p.budget_cents || 0), 0);
+      // PG returns BIGINT as a JS string. Coerce to Number before summing or
+      // we get string concatenation: "0" + "600000" + "1500000" = "06000001500000".
+      const total_pipeline = projects.reduce((sum, p) => sum + (Number(p.budget_cents) || 0), 0);
       return { success: true, data: { projects, total_pipeline_cents: total_pipeline, active_count: projects.length } };
     }
   }

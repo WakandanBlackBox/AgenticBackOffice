@@ -141,6 +141,20 @@ Railway auto-deploys from `main` on push. The only validation gate today is `npm
 
 When wiring these up, do it in this order: (1) ESLint flat config + `lint` script, (2) Vitest + first test on agent tools, (3) GitHub Actions running both, (4) branch protection. Don't document scripts in this file before they exist.
 
+## Zod patterns (validation gotchas)
+
+When writing or modifying schemas in `server/schemas/index.js`:
+
+- **Optional fields the client may send as `null`** — use `.nullish()` not `.optional()`. `.optional()` accepts only `undefined`; `.nullish()` accepts both. The chat endpoint's `project_id` 400'd silently for "All projects" requests until this was fixed (commit on feat/agent-specialization).
+- **PATCH routes** — never interpolate Zod-validated field names directly into SQL. Use a column allowlist. Today's `documents.js` PATCH routes are fragile this way; flagged in tech debt below.
+- **Cents** — always `z.number().int().nonnegative()`. Don't use `.positive()` (rejects 0, breaks zero-budget seeds).
+- **UUIDs from URL params** — the route validates separately; don't double-validate in the body schema unless it's a different resource.
+- **Dates** — `z.string().regex(/^\d{4}-\d{2}-\d{2}$/)` for YYYY-MM-DD; pg coerces correctly. Don't use `z.date()` — Zod won't parse a string into one without `.coerce.date()`.
+- **Enums that match a DB CHECK constraint** — keep them in lockstep. If the schema list and the SQL CHECK list drift, the API accepts values the DB rejects → 500s on insert.
+- **`.passthrough()` is dangerous** — silent attribute sneak-through. Default to strict objects; only relax when there's a real reason.
+
+When in doubt, mirror an existing schema in the file rather than inventing a new pattern.
+
 ## Known Issues / Tech Debt
 
 - `rejectUnauthorized: false` in `db.js` -- needs to be `true` for production SSL
