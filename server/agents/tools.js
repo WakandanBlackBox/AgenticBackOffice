@@ -1,4 +1,5 @@
 import db from '../db.js';
+import { KNOWLEDGE, listKnowledgeTopics } from './knowledge.js';
 
 // Tool definitions for Claude tool_use -- each returns { success, data } or { success: false, error }
 
@@ -405,6 +406,29 @@ const TOOL_DEFS = {
         [userId, args.category, args.key, value, conf]
       );
       return { success: true, data: { ...row, awaiting_owner_review: true } };
+    }
+  },
+
+  // === DOMAIN KNOWLEDGE ===
+  // Just-in-time RAG-without-embeddings. Agents call this to pull a focused
+  // body of expertise on demand — keeps system prompts lean while letting
+  // each agent reach for deep domain heuristics when the situation warrants.
+  read_knowledge: {
+    name: 'read_knowledge',
+    description: 'Pull a focused body of domain expertise on demand. Topics: pricing_psychology, proposal_structure, contract_landmines, contract_protective_clauses, scope_creep_phrases, scope_creep_patterns, invoice_collections, invoice_structure, finance_health_signals. Use ONE topic per call, only when relevant.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'Topic key — see description for full list' }
+      },
+      required: ['topic']
+    },
+    fn: async (args) => {
+      const body = KNOWLEDGE[args.topic];
+      if (!body) {
+        return { success: false, error: `Unknown topic "${args.topic}". Available: ${listKnowledgeTopics().join(', ')}` };
+      }
+      return { success: true, data: { topic: args.topic, body } };
     }
   },
 
