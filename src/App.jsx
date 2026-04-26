@@ -567,16 +567,101 @@ function KPICard({ label, value, color, subtitle, icon: Icon }) {
   );
 }
 
+// ROI tile cards. Distinct from KPICard because they need null-state messaging
+// ("Need more data") rather than rendering 0 — judges asked for "evidence", and
+// a fake "$0 saved" undermines the trust narrative more than no number at all.
+function RoiCard({ label, value, color, subtitle, icon: Icon, tooltip, isNull }) {
+  return (
+    <Card
+      className="hover:border-primary/40 transition-all hover:-translate-y-px"
+      title={tooltip}
+      style={{ minHeight: 148 }}
+    >
+      <CardContent className="pt-5 pb-5 flex flex-col h-full">
+        <div className="flex items-start justify-between mb-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+          {Icon && (
+            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+              style={{ background: color + '1A' }}>
+              <Icon size={17} style={{ color }} />
+            </div>
+          )}
+        </div>
+        <p
+          className={isNull ? 'text-base font-semibold tracking-tight leading-snug' : 'text-3xl font-extrabold tracking-tight leading-none'}
+          style={{ color: isNull ? C.textMuted : C.text }}
+        >
+          {value}
+        </p>
+        {subtitle && <p className="text-xs text-muted-foreground mt-2.5">{subtitle}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 function DashboardView({ state, dispatch }) {
+  const [roi, setRoi] = useState(null);
+
   useEffect(() => {
     dispatch({ type: 'SET_DASHBOARD_LOADING' });
     api('/dashboard').then((data) => dispatch({ type: 'SET_DASHBOARD', data })).catch(() => {});
+    api('/dashboard/roi').then(setRoi).catch(() => {});
   }, []);
 
   const d = state.dashboard;
   if (state.dashboardLoading || !d) return <p className="text-muted-foreground italic text-center p-10">Loading dashboard...</p>;
 
   const kpis = d.kpis || {};
+
+  // Compose the 4 ROI tile entries. Null-tolerant: if a metric doesn't have
+  // enough samples, render an explanatory subtitle instead of a fake "0".
+  const roiCards = roi ? [
+    {
+      label: 'Scope Creep Blocked',
+      value: roi.scope_creep_blocked.cents > 0 ? fmt(roi.scope_creep_blocked.cents) : '—',
+      subtitle: roi.scope_creep_blocked.events > 0
+        ? `${roi.scope_creep_blocked.events} change order${roi.scope_creep_blocked.events === 1 ? '' : 's'} · last ${roi.window_days}d`
+        : `No change orders logged in last ${roi.window_days}d`,
+      color: C.scope,
+      icon: AlertTriangle,
+      tooltip: 'Sum of estimated cost on Scope Guardian change-order events.',
+      isNull: roi.scope_creep_blocked.events === 0
+    },
+    {
+      label: 'Hours Saved',
+      value: roi.hours_saved > 0 ? `${roi.hours_saved}h` : '—',
+      subtitle: roi.agent_run_count > 0
+        ? `${roi.agent_run_count} agent runs · est. vs manual baseline`
+        : 'No agent runs in window',
+      color: C.success,
+      icon: Zap,
+      tooltip: 'Sum of agent runs × per-agent baseline minutes (proposal 45m, contract 30m, scope 15m, invoice 10m). Conservative estimate.',
+      isNull: roi.hours_saved === 0
+    },
+    {
+      label: 'Avg Collection',
+      value: roi.avg_collection_days != null ? `${roi.avg_collection_days}d` : 'Need more data',
+      subtitle: roi.avg_collection_days != null
+        ? `Across ${roi.collection_samples} paid invoices`
+        : `${roi.collection_samples}/5 paid invoices needed`,
+      color: C.accent,
+      icon: Clock,
+      tooltip: 'Average days from invoice sent_at to paid_at. Requires 5+ samples.',
+      isNull: roi.avg_collection_days == null
+    },
+    {
+      label: 'Close Rate',
+      value: roi.proposal_close_rate != null ? `${Math.round(roi.proposal_close_rate * 100)}%` : 'Need more data',
+      subtitle: roi.proposal_close_rate != null
+        ? `${roi.proposal_samples} proposals sent · last 90d`
+        : `${roi.proposal_samples}/5 proposals needed`,
+      color: C.proposal,
+      icon: TrendingUp,
+      tooltip: 'Accepted ÷ (sent + accepted + rejected) over a 90-day window.',
+      isNull: roi.proposal_close_rate == null
+    }
+  ] : null;
+
   return (
     <div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -585,6 +670,21 @@ function DashboardView({ state, dispatch }) {
         <KPICard label="Revenue (30d)" value={fmt(kpis.paid_cents)} color={C.accent} icon={DollarSign} />
         <KPICard label="Outstanding" value={fmt(kpis.outstanding_cents)} color={C.accent} subtitle={kpis.overdue_count ? `${kpis.overdue_count} overdue` : undefined} icon={Clock} />
       </div>
+
+      {roiCards && (
+        <div className="mb-8">
+          <div className="flex items-center gap-3 mb-3">
+            <ShieldCheck size={16} style={{ color: C.primary }} />
+            <p className="text-xs font-bold uppercase tracking-widest" style={{ color: C.text }}>
+              Agent ROI · last {roi.window_days} days
+            </p>
+            <span className="text-xs text-muted-foreground">— what your AI team did for you</span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {roiCards.map((c) => <RoiCard key={c.label} {...c} />)}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-5">
         <Card>
