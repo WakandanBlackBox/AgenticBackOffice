@@ -298,6 +298,116 @@ const TOOL_DEFS = {
     }
   },
 
+  // === MEMORY LAYER ===
+  // Cap memory reads at 10 facts × 120 char values to keep prompts tight.
+  // Agent writes always land as status='pending', source='agent' — owner
+  // promotes via the Memory Drawer UI. Read endpoints return only confirmed
+  // facts so unverified pattern guesses never leak back into agent reasoning.
+  read_client_memory: {
+    name: 'read_client_memory',
+    description: 'Recall confirmed facts about a client (payment preferences, communication tone, past red flags, pricing history). Use BEFORE drafting to personalize. Returns up to 10 most recent confirmed facts.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string', description: 'Client UUID (from get_project_context)' },
+        category: { type: 'string', enum: ['payment_pref', 'comm_tone', 'red_flag', 'pricing_history', 'other'], description: 'Optional filter to one category' }
+      },
+      required: ['client_id']
+    },
+    fn: async (args, userId) => {
+      const params = [userId, args.client_id];
+      let sql = `SELECT category, key, LEFT(value, 120) AS value, confidence
+                   FROM client_memory
+                  WHERE user_id = $1 AND client_id = $2 AND status = 'confirmed'`;
+      if (args.category) { params.push(args.category); sql += ` AND category = $${params.length}`; }
+      sql += ' ORDER BY updated_at DESC LIMIT 10';
+      const rows = await db.many(sql, params);
+      return { success: true, data: { facts: rows, count: rows.length } };
+    }
+  },
+
+  write_client_memory: {
+    name: 'write_client_memory',
+    description: 'Record a new pattern about a client. Lands as PENDING for owner review — never auto-applied. Use sparingly: one fact per call, only when you observe something that would change future behavior (e.g., "prefers net-15", "asks for revisions late", "approved $3600 change order").',
+    input_schema: {
+      type: 'object',
+      properties: {
+        client_id: { type: 'string', description: 'Client UUID' },
+        category: { type: 'string', enum: ['payment_pref', 'comm_tone', 'red_flag', 'pricing_history', 'other'] },
+        key: { type: 'string', description: 'Short identifier, e.g. "preferred_terms" or "scope_creep_pattern"' },
+        value: { type: 'string', description: 'The fact in one sentence (≤120 chars stored)' },
+        confidence: { type: 'number', description: '0.0-1.0 — how sure are you?' }
+      },
+      required: ['client_id', 'category', 'key', 'value']
+    },
+    fn: async (args, userId) => {
+      const value = String(args.value || '').slice(0, 120);
+      const conf = Number.isFinite(Number(args.confidence)) ? Math.max(0, Math.min(1, Number(args.confidence))) : null;
+      // Upsert by (user_id, client_id, category, key) — keeps the table from
+      // accumulating duplicate guesses about the same fact. Repeated agent
+      // observations refresh updated_at and confidence but stay pending.
+      const row = await db.one(
+        `INSERT INTO client_memory (user_id, client_id, category, key, value, confidence, source, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'agent', 'pending')
+         ON CONFLICT (user_id, client_id, category, key)
+         DO UPDATE SET value = EXCLUDED.value, confidence = EXCLUDED.confidence, updated_at = now()
+         RETURNING id, status`,
+        [userId, args.client_id, args.category, args.key, value, conf]
+      );
+      return { success: true, data: { ...row, awaiting_owner_review: true } };
+    }
+  },
+
+  read_workspace_memory: {
+    name: 'read_workspace_memory',
+    description: 'Recall confirmed workspace-wide patterns (your default rates, contract preferences, common red flags across all clients). Returns up to 10 most recent confirmed facts.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['payment_pref', 'comm_tone', 'red_flag', 'pricing_history', 'other'] }
+      },
+      required: []
+    },
+    fn: async (args, userId) => {
+      const params = [userId];
+      let sql = `SELECT category, key, LEFT(value, 120) AS value, confidence
+                   FROM workspace_memory
+                  WHERE user_id = $1 AND status = 'confirmed'`;
+      if (args.category) { params.push(args.category); sql += ` AND category = $${params.length}`; }
+      sql += ' ORDER BY updated_at DESC LIMIT 10';
+      const rows = await db.many(sql, params);
+      return { success: true, data: { facts: rows, count: rows.length } };
+    }
+  },
+
+  write_workspace_memory: {
+    name: 'write_workspace_memory',
+    description: 'Record a workspace-wide pattern (applies across all clients). Lands as PENDING for owner review.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: ['payment_pref', 'comm_tone', 'red_flag', 'pricing_history', 'other'] },
+        key: { type: 'string' },
+        value: { type: 'string' },
+        confidence: { type: 'number' }
+      },
+      required: ['category', 'key', 'value']
+    },
+    fn: async (args, userId) => {
+      const value = String(args.value || '').slice(0, 120);
+      const conf = Number.isFinite(Number(args.confidence)) ? Math.max(0, Math.min(1, Number(args.confidence))) : null;
+      const row = await db.one(
+        `INSERT INTO workspace_memory (user_id, category, key, value, confidence, source, status)
+         VALUES ($1, $2, $3, $4, $5, 'agent', 'pending')
+         ON CONFLICT (user_id, category, key)
+         DO UPDATE SET value = EXCLUDED.value, confidence = EXCLUDED.confidence, updated_at = now()
+         RETURNING id, status`,
+        [userId, args.category, args.key, value, conf]
+      );
+      return { success: true, data: { ...row, awaiting_owner_review: true } };
+    }
+  },
+
   // === SCOPE GUARDIAN TOOLS ===
   get_contract_scope: {
     name: 'get_contract_scope',
