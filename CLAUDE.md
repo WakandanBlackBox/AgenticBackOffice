@@ -11,6 +11,12 @@ AI-powered back-office platform for freelancers and agencies. Five specialized a
 - **Validation:** Zod at API boundaries
 - **Deploy:** Railway (combined service — Express serves built React)
 
+## Effort Level
+
+- Default effort is `high` (set in user settings). This is correct for most coding tasks.
+- Use `/effort max` for planning, architecture decisions, complex debugging, and code review -- anywhere reasoning quality matters more than speed.
+- Do not use max for routine edits, simple bug fixes, or straightforward CRUD work.
+
 ## Code Rules
 
 - Semicolons always. Single quotes. `const` only — no `let` unless mutation required.
@@ -25,10 +31,12 @@ AI-powered back-office platform for freelancers and agencies. Five specialized a
 
 ## Agent Architecture
 
-- 5 agents: Proposal (Sonnet), Invoice (Haiku), Contract (Sonnet), Scope Guardian (Sonnet), Insight (Haiku)
-- Dispatcher routes by intent keywords, manages workflows with task dependencies
+- 5 specialist agents + Chief orchestrator. All currently use Haiku (`claude-haiku-4-5-20251001`) -- Sonnet disabled during hackathon (see `agent-config.js` MODELS)
+- Dispatcher routes by intent keywords, multi-domain queries go to Chief
 - Each agent: system prompt + 3-6 tools (database operations). Zero tool overlap between agents.
-- Tools return `{ success, data }` or `{ success: false, error }` — agents provide judgment, tools provide data
+- Tools return `{ success, data }` or `{ success: false, error }` -- agents provide judgment, tools provide data
+- Chief delegates via `delegate_to_agent` meta-tool with max depth 2
+- Pre-built workflows: `onboardingWorkflow` (proposal -> contract + invoice) and `scopeCheckWorkflow`
 
 ## Security
 
@@ -44,27 +52,38 @@ AI-powered back-office platform for freelancers and agencies. Five specialized a
 
 ```
 server/
-  index.js              — Express app, middleware, static serving
-  db.js                 — pg Pool + query helper
-  migrate.js            — Run schema.sql
+  index.js              -- Express app, middleware, static serving
+  db.js                 -- pg Pool + query helper
+  schema.sql            -- Full database schema
+  migrate.js            -- Run schema.sql
+  seed.js               -- Idempotent demo data (demo@backoffice.ai)
   middleware/
-    auth.js             — JWT verify → req.user
-    validate.js         — Zod middleware factory
+    auth.js             -- JWT verify -> req.user
+    validate.js         -- Zod middleware factory
   routes/
-    auth.js             — register, login
-    clients.js          — CRUD
-    projects.js         — CRUD
-    agents.js           — 5 agent trigger endpoints (SSE)
+    auth.js             -- register, login
+    clients.js          -- CRUD
+    projects.js         -- CRUD
+    agents.js           -- 5 agent trigger endpoints (SSE) + chat router
+    documents.js        -- Document retrieval
+    dashboard.js        -- Aggregated KPIs, pipeline, milestones
+    milestones.js       -- Milestone CRUD + approval flow + share tokens
+    client-portal.js    -- Public portal (no auth, token-gated)
   agents/
-    dispatcher.js       — Intent routing + workflow orchestration
-    agent-config.js     — All 5 agent configs (prompts, tools, models)
-    tools.js            — Tool implementations (DB operations)
+    dispatcher.js       -- Intent routing + workflow orchestration
+    agent-config.js     -- All agent configs (prompts, tools, models)
+    tools.js            -- Tool implementations (DB operations)
+    delegate.js         -- Chief -> sub-agent delegation meta-tool
+    token-budget.js     -- Daily per-user token budget gating
   schemas/
-    index.js            — All Zod schemas
+    index.js            -- All Zod schemas
 src/
-  App.jsx               — Single-file React app
-  main.jsx              — Entry
-  index.css             — Styles
+  App.jsx               -- Main app (all views, reducer, chat streaming)
+  LandingView.jsx       -- Marketing landing page
+  main.jsx              -- Entry
+  index.css             -- Styles
+  components/ui/        -- shadcn/ui primitives (button, card, badge, input, textarea, separator)
+  lib/utils.js          -- cn() helper
 ```
 
 ## Commands
@@ -74,7 +93,21 @@ npm run dev           # Start both server + client
 npm run dev:server    # Server only (port 3000)
 npm run dev:client    # Vite dev server (port 5173)
 npm run build         # Build React for production
-npm run db:migrate    # Run schema.sql
+npm run db:migrate    # Run schema.sql (idempotent: ALTER TABLE ... ADD COLUMN IF NOT EXISTS for evolutions)
+npm run db:seed       # Seed demo data (idempotent)
+npm start             # Production start (no env-file flag — Railway provides env)
+```
+
+No `lint`, `test`, or `lint:fix` scripts — ESLint, Vitest, lint-staged, husky, and GitHub Actions are NOT installed. `npm run build` is currently the only validation gate. Prefer adding scripts when the tooling is actually wired up rather than referencing them aspirationally.
+
+## Environment Setup
+
+```bash
+cp .env.example .env  # Fill in DATABASE_URL, ANTHROPIC_API_KEY, JWT_SECRET
+npm install
+npm run db:migrate
+npm run db:seed       # Creates demo user: demo@backoffice.ai / demo1234
+npm run dev
 ```
 
 ## Work Rules
@@ -95,6 +128,32 @@ npm run db:migrate    # Run schema.sql
 - Cost estimates use `estimateCost()` in dispatcher and are included in `agent_complete` events
 - When adding new tools, keep `input_schema` minimal -- every property adds to cached tool token count
 - When adding new agents, follow the compressed prompt pattern in `agent-config.js`
+
+## Linting / Testing / CI
+
+**Currently NOT set up** — flagged as tech debt:
+- No ESLint config, no `lint` / `lint:fix` scripts. Code style (semicolons, single quotes, const-only) is enforced by convention only.
+- No Vitest, no `test` script, no test files anywhere in the repo. Zero coverage.
+- No GitHub Actions workflow, no CI. PRs are not gated.
+- No `lint-staged` / `husky` pre-commit hooks.
+
+Railway auto-deploys from `main` on push. The only validation gate today is `npm run build` succeeding.
+
+When wiring these up, do it in this order: (1) ESLint flat config + `lint` script, (2) Vitest + first test on agent tools, (3) GitHub Actions running both, (4) branch protection. Don't document scripts in this file before they exist.
+
+## Known Issues / Tech Debt
+
+- `rejectUnauthorized: false` in `db.js` -- needs to be `true` for production SSL
+- PATCH routes interpolate Zod-validated field names into SQL -- works but fragile, should use column allowlists
+- No pagination on list endpoints (clients, projects, invoices)
+- No security headers (helmet not installed)
+- JWT stored in localStorage -- vulnerable to XSS, should be HttpOnly cookie
+- No token refresh -- 7-day expiry, silent logout
+- Frontend is a 2,174-line monolith (`App.jsx`) -- needs component extraction
+- SSE streaming has no reconnection/retry on disconnect
+- `react` and `react-dom` are in devDependencies instead of dependencies
+- No `DELETE /projects/:id` route despite frontend UI supporting it
+- Agent config says Sonnet in comments but all agents use Haiku
 
 ## Design System
 
