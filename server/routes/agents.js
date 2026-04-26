@@ -120,6 +120,12 @@ router.get('/usage', async (req, res) => {
 });
 
 // Smart chat - auto-route to best agent (with proactive scope detection)
+// Agents that REQUIRE a project_id (their tools fail without it). Insight is
+// the only project-agnostic specialist; chief delegates so it inherits the
+// requirement of whatever it routes to. Guarding here prevents silent agent
+// failures from a null project_id and saves the round-trip + tokens.
+const PROJECT_SCOPED_AGENTS = new Set(['proposal', 'invoice', 'contract', 'scope_guardian']);
+
 router.post('/chat', validate(chatSchema), async (req, res) => {
   const { message, project_id } = req.validated;
 
@@ -127,6 +133,21 @@ router.post('/chat', validate(chatSchema), async (req, res) => {
 
   // Check daily token budget
   const agent = routeToAgent(message);
+
+  // Guard: if the routed agent needs a project and none is selected, return a
+  // friendly SSE message instead of running the agent against a null context.
+  // (Chief is excluded — it can sometimes answer without a project, and over-
+  // gating it would block legitimate cross-project orchestration prompts.)
+  if (!project_id && PROJECT_SCOPED_AGENTS.has(agent.id)) {
+    sendEvent(res, {
+      type: 'text',
+      text: `To run the ${agent.name}, pick a project from the dropdown above first — this action needs a specific project's context.`
+    });
+    sendEvent(res, { type: 'done' });
+    res.end();
+    return;
+  }
+
   const budget = await checkBudget(req.user.id, agent.id);
   if (!budget.allowed) {
     sendEvent(res, { type: 'budget_exceeded', usage: budget.usage, reason: budget.reason });

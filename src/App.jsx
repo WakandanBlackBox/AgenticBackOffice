@@ -11,7 +11,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Kanban, MessageSquare,
   BookOpen, Activity, LogOut, Search, Bell, TrendingUp, DollarSign,
   Clock, AlertTriangle, ChevronRight, UserCheck, Zap, Cpu, Timer, Plus,
-  Mail, Building2, ChevronDown, Check, X,
+  Mail, Building2, ChevronDown, Check, X, Inbox, ShieldCheck, Send,
 } from 'lucide-react';
 
 // ─── Colors ────────────────────────────────────────────────────────
@@ -368,11 +368,25 @@ function AuthView({ state, dispatch }) {
 
 // ─── Sidebar ──────────────────────────────────────────────────────
 function Sidebar({ state, dispatch }) {
+  const [draftsCount, setDraftsCount] = useState(0);
+
+  // Poll the drafts queue every 30s so the badge stays fresh after agent runs
+  // and after approve-and-send actions in other views.
+  useEffect(() => {
+    if (!state.user) return;
+    let cancelled = false;
+    const refresh = () => api('/drafts').then(({ count }) => { if (!cancelled) setDraftsCount(count || 0); }).catch(() => {});
+    refresh();
+    const t = setInterval(refresh, 30000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [state.user, state.view]);
+
   const navItems = [
     { id: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
     { id: 'projects', label: 'Projects', Icon: FolderOpen },
     { id: 'clients', label: 'Clients', Icon: Users },
     { id: 'kanban', label: 'Milestone Board', Icon: Kanban },
+    { id: 'drafts', label: 'Drafts Inbox', Icon: Inbox, badge: draftsCount },
     { id: '_divider' },
     { id: 'chat', label: 'AI Chat', Icon: MessageSquare },
     { id: 'onboarding', label: 'Getting Started', Icon: BookOpen },
@@ -423,6 +437,12 @@ function Sidebar({ state, dispatch }) {
               <span className="flex-1">{item.label}</span>
               {item.id === 'chat' && state.chatStreaming && (
                 <span className="typing-dot w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.primary }} />
+              )}
+              {item.badge > 0 && (
+                <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                  style={{ background: C.warning + '22', color: C.warning, minWidth: 18, textAlign: 'center' }}>
+                  {item.badge}
+                </span>
               )}
               {active && <ChevronRight size={14} className="shrink-0 opacity-40" />}
             </button>
@@ -706,9 +726,22 @@ function ChatView({ state, dispatch }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [state.chatMessages]);
 
+  // Action keywords that need a specific project's context. If none is selected,
+  // we surface a friendly nudge instead of sending the request — saves a round
+  // trip and matches the server-side guard in routes/agents.js.
+  const PROJECT_ACTION_KEYWORDS = /\b(proposal|quote|pitch|bid|estimate|invoice|bill|charge|deposit|contract|agreement|clause|nda|scope|change order)\b/i;
+
   const handleSend = useCallback(() => {
     if (!input.trim() || state.chatStreaming) return;
     const msg = input.trim();
+    if (!state.chatProjectId && PROJECT_ACTION_KEYWORDS.test(msg)) {
+      dispatch({ type: 'CHAT_ADD_USER_MSG', message: msg });
+      dispatch({ type: 'CHAT_STREAM_START' });
+      dispatch({ type: 'CHAT_STREAM_TEXT', content: 'Pick a project from the dropdown above first — this action needs a specific project’s context.' });
+      dispatch({ type: 'CHAT_STREAM_DONE' });
+      setInput('');
+      return;
+    }
     setInput('');
     abortRef.current = new AbortController();
     streamChat(msg, state.chatProjectId, dispatch, abortRef.current.signal);
@@ -2107,6 +2140,160 @@ function ClientPortalView({ token }) {
   );
 }
 
+// ─── Drafts Inbox View ─────────────────────────────────────────────
+// The human-in-the-loop approval surface. Agents create proposals/invoices/contracts
+// in pending_approval state; the freelancer reviews + clicks "Approve & Send" here.
+// Backed by GET /api/drafts and POST /api/drafts/{type}/:id/send.
+const RESOURCE_LABELS = {
+  proposal: { color: '#60A5FA', label: 'Proposal', endpoint: 'proposals' },
+  invoice: { color: '#34D399', label: 'Invoice', endpoint: 'invoices' },
+  contract: { color: '#F472B6', label: 'Contract', endpoint: 'contracts' },
+};
+
+function ConfidenceBadge({ score }) {
+  if (score == null) return <span className="text-xs text-muted-foreground">no score</span>;
+  const n = Number(score);
+  const color = n < 0.7 ? C.warning : n < 0.85 ? C.accent : C.success;
+  const label = n < 0.7 ? 'review carefully' : n < 0.85 ? 'looks ok' : 'high confidence';
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs">
+      <span className="w-2 h-2 rounded-full" style={{ background: color }} />
+      <span style={{ color }}>{(n * 100).toFixed(0)}%</span>
+      <span className="text-muted-foreground">· {label}</span>
+    </span>
+  );
+}
+
+function DraftsView({ state, dispatch }) {
+  const [drafts, setDrafts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [sendingId, setSendingId] = useState(null);
+  const [error, setError] = useState(null);
+  const [recentlySent, setRecentlySent] = useState([]);
+
+  const refresh = useCallback(() => {
+    setLoading(true);
+    api('/drafts').then((data) => {
+      setDrafts(data.drafts || []);
+      setLoading(false);
+    }).catch((e) => { setError(e.message || String(e)); setLoading(false); });
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleSend = async (draft) => {
+    const meta = RESOURCE_LABELS[draft.resource_type];
+    if (!meta) return;
+    setSendingId(draft.id);
+    setError(null);
+    try {
+      await api(`/drafts/${meta.endpoint}/${draft.id}/send`, { method: 'POST' });
+      setDrafts((prev) => prev.filter((d) => d.id !== draft.id));
+      setRecentlySent((prev) => [{ ...draft, sent_at: new Date().toISOString() }, ...prev].slice(0, 5));
+    } catch (e) {
+      setError(e.message || 'Send failed');
+      refresh();
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <ShieldCheck size={20} style={{ color: C.primary }} />
+            <h1 className="text-2xl font-bold text-foreground">Drafts Inbox</h1>
+            <span style={S.badge(C.warning)}>{drafts.length} pending</span>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Agents drafted these — nothing leaves your inbox until you approve. Review the confidence score, then send.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>
+      </div>
+
+      {error && (
+        <Card className="mb-4" style={{ borderColor: C.danger + '66' }}>
+          <CardContent className="pt-4 pb-4 flex items-center gap-3">
+            <AlertTriangle size={16} style={{ color: C.danger }} />
+            <span className="text-sm" style={{ color: C.danger }}>{error}</span>
+          </CardContent>
+        </Card>
+      )}
+
+      {loading && drafts.length === 0 && <p className="text-muted-foreground italic text-center py-10">Loading...</p>}
+
+      {!loading && drafts.length === 0 && (
+        <Card>
+          <CardContent className="pt-10 pb-10 text-center">
+            <Inbox size={32} className="mx-auto mb-3 opacity-40" />
+            <p className="text-foreground font-medium mb-1">No drafts waiting for approval</p>
+            <p className="text-sm text-muted-foreground">Trigger an agent from the AI Chat to create one.</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="space-y-3">
+        {drafts.map((d) => {
+          const meta = RESOURCE_LABELS[d.resource_type] || { color: C.textDim, label: d.resource_type };
+          const isSending = sendingId === d.id;
+          return (
+            <Card key={d.id} className="card-hover">
+              <CardContent className="pt-5 pb-5">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <span style={S.badge(meta.color)}>{meta.label}</span>
+                      <span className="text-sm font-semibold text-foreground truncate">{d.title}</span>
+                      {d.amount_cents != null && (
+                        <span className="text-xs text-muted-foreground">· {fmt(d.amount_cents)}</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      <span>{d.project_name}</span>
+                      {d.client_name && <><span>·</span><span>{d.client_name}</span></>}
+                      <span>·</span>
+                      <span>{timeAgo(d.created_at)}</span>
+                    </div>
+                    <div className="mt-3"><ConfidenceBadge score={d.confidence} /></div>
+                  </div>
+                  <div className="shrink-0 flex flex-col gap-2 items-end">
+                    <Button onClick={() => handleSend(d)} disabled={isSending} size="sm">
+                      <Send size={13} className="mr-1.5" />
+                      {isSending ? 'Sending...' : 'Approve & Send'}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {recentlySent.length > 0 && (
+        <div className="mt-10">
+          <p className="text-xs uppercase tracking-wider text-muted-foreground mb-3 font-semibold">Recently sent</p>
+          <div className="space-y-2">
+            {recentlySent.map((d) => {
+              const meta = RESOURCE_LABELS[d.resource_type] || { color: C.textDim, label: d.resource_type };
+              return (
+                <div key={d.id + (d.sent_at || '')} className="flex items-center gap-3 px-4 py-2 rounded-lg" style={{ background: C.surface, border: `1px solid ${C.border}` }}>
+                  <Check size={14} style={{ color: C.success }} />
+                  <span style={S.badge(meta.color)}>{meta.label}</span>
+                  <span className="text-sm text-foreground truncate">{d.title}</span>
+                  <span className="ml-auto text-xs text-muted-foreground">just now · audit logged</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [showLanding, setShowLanding] = useState(true);
@@ -2152,6 +2339,7 @@ export default function App() {
     project_detail: ProjectDetail,
     clients: ClientsView,
     kanban: KanbanView,
+    drafts: DraftsView,
     onboarding: OnboardingView,
     activity: ActivityLogView,
   };
