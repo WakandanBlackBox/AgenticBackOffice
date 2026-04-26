@@ -2,6 +2,7 @@
   "$schema": "https://railway.app/railway.schema.json",
   "build": { "builder": "NIXPACKS" },
   "deploy": {
+    "preDeployCommand": "node server/migrate.js",
     "startCommand": "node server/index.js",
     "healthcheckPath": "/api/health",
     "restartPolicyType": "ON_FAILURE",
