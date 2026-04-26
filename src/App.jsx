@@ -11,7 +11,7 @@ import {
   LayoutDashboard, FolderOpen, Users, Kanban, MessageSquare,
   BookOpen, Activity, LogOut, Search, Bell, TrendingUp, DollarSign,
   Clock, AlertTriangle, ChevronRight, UserCheck, Zap, Cpu, Timer, Plus,
-  Mail, Building2, ChevronDown, Check, X, Inbox, ShieldCheck, Send,
+  Mail, Building2, ChevronDown, Check, X, Inbox, ShieldCheck, Send, Brain, Trash2, Pencil,
 } from 'lucide-react';
 
 // ─── Colors ────────────────────────────────────────────────────────
@@ -125,6 +125,7 @@ const streamChat = async (message, projectId, dispatch, abortSignal) => {
             case 'delegation_start': dispatch({ type: 'CHAT_DELEGATION_START', agent: data.agent, parent: data.parent }); break;
             case 'delegation_complete': dispatch({ type: 'CHAT_DELEGATION_COMPLETE', agent: data.agent, parent: data.parent }); break;
             case 'agent_complete': dispatch({ type: 'CHAT_AGENT_COMPLETE', agent: data.agent, durationMs: data.duration_ms, tokens: data.tokens }); break;
+            case 'draft_saved': dispatch({ type: 'CHAT_STREAM_EVENT', event: { type: 'draft_saved', resource_type: data.resource_type, resource_id: data.resource_id, title: data.title, amount_cents: data.amount_cents, confidence: data.confidence } }); break;
             case 'budget_exceeded': dispatch({ type: 'CHAT_STREAM_ERROR', error: data.reason }); break;
             case 'error': dispatch({ type: 'CHAT_STREAM_ERROR', error: data.error }); break;
             case 'done': break; // handled by reader completing
@@ -146,6 +147,14 @@ const initialState = {
   authMode: 'login', authError: null,
   dashboard: null, dashboardLoading: false,
   chatMessages: [], chatStreaming: false, chatProjectId: null, activeAgents: [],
+  // Verbose chat: show per-agent badges, delegations, tool-call pills, and
+  // per-agent timing/token stats. Default OFF — the cohesive preloader keeps
+  // the UI focused on outcome, not mechanism. Power users can flip it on.
+  chatVerbose: localStorage.getItem('chatVerbose') === '1',
+  // Transient: the draft id to auto-scroll + auto-expand on next DraftsView
+  // mount. Cleared by DraftsView once consumed so revisiting Drafts doesn't
+  // keep re-focusing an old item.
+  draftFocusId: null,
   projects: [], projectsLoading: false,
   selectedProject: null, projectDetailLoading: false,
   clients: [], clientsLoading: false, showClientForm: false, editingClient: null,
@@ -160,21 +169,42 @@ function reducer(state, action) {
     case 'SET_AUTH': {
       localStorage.setItem('token', action.token);
       const savedView = localStorage.getItem('currentView');
-      const restoreView = savedView && savedView !== 'auth' && savedView !== 'project_detail' ? savedView : 'dashboard';
+      // Allow restoring project_detail only if we have a stored project_id to
+      // re-fetch (the boot effect handles the actual fetch). Otherwise fall
+      // back to dashboard so the user doesn't land on a broken empty view.
+      const hasSavedProject = !!localStorage.getItem('selectedProjectId');
+      const canRestoreDetail = savedView === 'project_detail' && hasSavedProject;
+      const restoreView = savedView && savedView !== 'auth' && (savedView !== 'project_detail' || canRestoreDetail)
+        ? savedView
+        : 'dashboard';
       return { ...state, user: action.user, token: action.token, authError: null, view: restoreView };
     }
     case 'LOGOUT': {
       localStorage.removeItem('token');
       localStorage.removeItem('currentView');
+      localStorage.removeItem('selectedProjectId');
       return { ...initialState, token: null, view: 'auth' };
     }
+    case 'SET_CHAT_VERBOSE': {
+      localStorage.setItem('chatVerbose', action.verbose ? '1' : '0');
+      return { ...state, chatVerbose: action.verbose };
+    }
+    case 'SET_DRAFT_FOCUS': return { ...state, draftFocusId: action.id || null };
     case 'SET_AUTH_MODE': return { ...state, authMode: action.mode, authError: null };
     case 'SET_AUTH_ERROR': return { ...state, authError: action.error };
     case 'SET_DASHBOARD': return { ...state, dashboard: action.data, dashboardLoading: false };
     case 'SET_DASHBOARD_LOADING': return { ...state, dashboardLoading: true };
     case 'SET_PROJECTS': return { ...state, projects: action.projects, projectsLoading: false };
     case 'SET_PROJECTS_LOADING': return { ...state, projectsLoading: true };
-    case 'SET_SELECTED_PROJECT': return { ...state, selectedProject: action.project, projectDetailLoading: false };
+    case 'SET_SELECTED_PROJECT': {
+      // Persist the project id so a hard refresh on the project_detail view
+      // can restore it via the boot effect. The /projects/:id endpoint returns
+      // a wrapper { project, proposals, ... }, while some callers pass a flat
+      // project object — handle both shapes.
+      const pid = action.project?.project?.id || action.project?.id;
+      if (pid) localStorage.setItem('selectedProjectId', pid);
+      return { ...state, selectedProject: action.project, projectDetailLoading: false };
+    }
     case 'SET_PROJECT_DETAIL_LOADING': return { ...state, projectDetailLoading: true };
     case 'SET_CLIENTS': return { ...state, clients: action.clients, clientsLoading: false };
     case 'SET_CLIENTS_LOADING': return { ...state, clientsLoading: true };
@@ -369,13 +399,17 @@ function AuthView({ state, dispatch }) {
 // ─── Sidebar ──────────────────────────────────────────────────────
 function Sidebar({ state, dispatch }) {
   const [draftsCount, setDraftsCount] = useState(0);
+  const [memoryPendingCount, setMemoryPendingCount] = useState(0);
 
-  // Poll the drafts queue every 30s so the badge stays fresh after agent runs
-  // and after approve-and-send actions in other views.
+  // Poll the drafts + pending-memory queues every 30s so the badges stay fresh
+  // after agent runs and approve-and-send actions in other views.
   useEffect(() => {
     if (!state.user) return;
     let cancelled = false;
-    const refresh = () => api('/drafts').then(({ count }) => { if (!cancelled) setDraftsCount(count || 0); }).catch(() => {});
+    const refresh = () => {
+      api('/drafts').then(({ count }) => { if (!cancelled) setDraftsCount(count || 0); }).catch(() => {});
+      api('/memory/pending').then(({ count }) => { if (!cancelled) setMemoryPendingCount(count || 0); }).catch(() => {});
+    };
     refresh();
     const t = setInterval(refresh, 30000);
     return () => { cancelled = true; clearInterval(t); };
@@ -387,6 +421,7 @@ function Sidebar({ state, dispatch }) {
     { id: 'clients', label: 'Clients', Icon: Users },
     { id: 'kanban', label: 'Milestone Board', Icon: Kanban },
     { id: 'drafts', label: 'Drafts Inbox', Icon: Inbox, badge: draftsCount },
+    { id: 'memory', label: 'Agent Memory', Icon: Brain, badge: memoryPendingCount },
     { id: '_divider' },
     { id: 'chat', label: 'AI Chat', Icon: MessageSquare },
     { id: 'onboarding', label: 'Getting Started', Icon: BookOpen },
@@ -631,7 +666,66 @@ function CopyButton({ text }) {
   );
 }
 
-function ChatMessage({ msg }) {
+// Cohesive preloader: a single spinner + status hint. We deliberately do NOT
+// expose the per-agent phase ("Thinking/Drafting/Reviewing") because that
+// reads as chain-of-thought — the user asked for a clean preloader animation.
+// Status hint rotates based on tool calls so it doesn't feel frozen.
+const SAVE_TOOLS = new Set(['save_proposal', 'create_invoice', 'save_contract', 'log_scope_event', 'flag_clause']);
+
+function deriveStatusHint(events) {
+  const calls = (events || []).filter((e) => e.type === 'tool_call');
+  if (calls.some((e) => e.tool === 'set_confidence')) return 'Finalizing';
+  if (calls.some((e) => SAVE_TOOLS.has(e.tool))) return 'Saving to drafts';
+  if (calls.length > 0) return 'Gathering context';
+  return 'Working';
+}
+
+function AgentPreloader({ events }) {
+  const hint = deriveStatusHint(events);
+  return (
+    <div className="flex items-center gap-3 py-2">
+      <span
+        className="inline-block rounded-full"
+        style={{
+          width: 14, height: 14,
+          border: `2px solid ${C.primary}33`,
+          borderTopColor: C.primary,
+          animation: 'spin 0.8s linear infinite'
+        }}
+      />
+      <span className="text-sm" style={{ color: C.textMuted }}>
+        BackOffice is working
+        <span className="text-xs ml-2" style={{ color: C.textDim }}>· {hint}…</span>
+      </span>
+    </div>
+  );
+}
+
+// Backstop for agent narration that slips past the system-prompt rules.
+// IMPORTANT: this only strips narration anchored at the START of the message,
+// peeling off chained narrations one at a time until a real content paragraph
+// begins. Mid-message sentences containing "I'll" or "let me" (legitimate
+// content like "I'll send once approved: ...") are NEVER touched.
+// Verbose mode bypasses this entirely — raw content preserved for debugging.
+// Anchored at the very start of the message. Lazy body match, terminator is
+// `:` or `.` followed by whitespace or end-of-string. Catches both colon- and
+// period-ended narration ("Now I'll save:", "Now I'll fetch X for the phase.")
+// while still being safe — only strips from the start, never mid-message.
+const NARRATION_PREFIX = /^[\s*_]*(?:now\s+i['']?ll|let me|i['']ll|first[,]?\s+(?:let|i['']ll)|next[,]?\s+(?:let|i['']ll)|alright[,!.]?\s+(?:let|i['']ll)|great[,!.]?\s+(?:let|i['']ll)|perfect[,!.]?\s+now|okay[,!.]?\s+(?:let|i['']ll))[^\n]{0,200}?[.:](?:\s|$|(?=[*_#]))/i;
+function stripLeadingNarration(text) {
+  if (!text) return text;
+  let out = text;
+  // Peel off as many chained leading narrations as exist; stop when the
+  // start of the string is real content.
+  while (true) {
+    const next = out.replace(NARRATION_PREFIX, '');
+    if (next === out) break;
+    out = next;
+  }
+  return out.replace(/^\s+/, '');
+}
+
+function ChatMessage({ msg, verbose = true, streaming = false, onOpenDrafts }) {
   if (msg.role === 'scope_alert') {
     return (
       <div className="fade-in" style={{ marginBottom: 16, padding: '14px 18px', background: C.scope + '12', border: `1px solid ${C.scope}44`, borderRadius: 14, borderLeft: `3px solid ${C.scope}` }}>
@@ -659,51 +753,96 @@ function ChatMessage({ msg }) {
   const delegations = (msg.events || []).filter((e) => e.type === 'delegation_start');
   const agentCompletes = (msg.events || []).filter((e) => e.type === 'agent_complete');
   const toolEvents = (msg.events || []).filter((e) => e.type === 'tool_call' || e.type === 'tool_result');
+  const draftsSaved = (msg.events || []).filter((e) => e.type === 'draft_saved');
+
+  // While the assistant is mid-stream, show ONLY the preloader (default mode)
+  // — hides the model's interstitial narration ("Now let me X..."). Once
+  // streaming completes, the preloader steps aside and the final content shows.
+  // Use the most recent assistant message in the list as the streaming target;
+  // we approximate "this is the streaming message" as: streaming && !msg.error
+  // && (no content yet OR this is the latest message).
+  const isStreamingThisMsg = streaming && !msg.error;
 
   return (
     <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 16 }}>
       <div className="fade-in" style={{ background: C.surface, borderRadius: '18px 18px 18px 4px', padding: '14px 18px', maxWidth: '85%', border: `1px solid ${C.border}` }}>
-        {/* Agent badges */}
-        {(msg.agents || []).length > 0 && (
+        {/* Cohesive preloader (default mode) — replaces content entirely while
+            streaming so the model's interstitial narration ("Now let me X...")
+            never reaches the user. */}
+        {isStreamingThisMsg && !verbose && <AgentPreloader events={msg.events} />}
+
+        {/* Verbose-mode noise: agent badges, delegations, tool pills */}
+        {verbose && (msg.agents || []).length > 0 && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             {msg.agents.map((a) => <AgentBadge key={a} agent={a} />)}
           </div>
         )}
-
-        {/* Delegation indicators */}
-        {delegations.map((d, i) => (
+        {verbose && delegations.map((d, i) => (
           <div key={i} style={{ borderLeft: `2px solid ${AGENT_COLORS[d.agent] || C.textDim}`, paddingLeft: 10, margin: '6px 0', fontSize: 12, color: C.textMuted }}>
             Delegated to {AGENT_NAMES[d.agent] || d.agent}
           </div>
         ))}
-
-        {/* Tool calls (collapsed by default) */}
-        {toolEvents.length > 0 && (
+        {verbose && toolEvents.length > 0 && (
           <div style={{ margin: '6px 0' }}>
             {toolEvents.map((e, i) => <ToolCallPill key={i} event={e} />)}
           </div>
         )}
 
-        {/* Main text content */}
-        <div style={{ fontSize: 14, lineHeight: 1.6 }}>
-          <MiniMarkdown text={msg.content} />
-        </div>
+        {/* Saved-draft cards: clickable confirmations the agent emits when a
+            save tool succeeded. Renders one card per save event in this turn. */}
+        {!isStreamingThisMsg && draftsSaved.map((d, i) => {
+          const meta = RESOURCE_LABELS[d.resource_type] || { color: C.textDim, label: d.resource_type, endpoint: '' };
+          const conf = d.confidence != null ? Math.round(Number(d.confidence) * 100) : null;
+          return (
+            <div key={i} className="my-2 rounded-xl p-3.5 flex items-center gap-3"
+              style={{ background: meta.color + '12', border: `1px solid ${meta.color}55` }}>
+              <div className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: meta.color + '22' }}>
+                <Inbox size={16} style={{ color: meta.color }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground truncate">
+                  {meta.label} saved · {d.title}
+                </p>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                  {d.amount_cents != null && <span>{fmt(d.amount_cents)}</span>}
+                  {d.amount_cents != null && conf != null && <span>·</span>}
+                  {conf != null && <span>{conf}% confidence</span>}
+                  <span>·</span>
+                  <span>pending your approval</span>
+                </div>
+              </div>
+              {onOpenDrafts && (
+                <Button size="sm" onClick={() => onOpenDrafts(d.resource_id)}>
+                  Open in Drafts <ChevronRight size={13} className="ml-1" />
+                </Button>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Main text content — hidden during streaming in default mode so the
+            user only sees the preloader, then the final result. Verbose mode
+            keeps the live stream visible (and the raw content) for debugging. */}
+        {msg.content && (verbose || !isStreamingThisMsg) && (
+          <div style={{ fontSize: 14, lineHeight: 1.6 }}>
+            <MiniMarkdown text={verbose ? msg.content : stripLeadingNarration(msg.content)} />
+          </div>
+        )}
 
         {/* Error */}
         {msg.error && <p style={{ color: C.danger, fontSize: 13, marginTop: 8 }}>{msg.error}</p>}
 
-        {/* Completion stats */}
-        {/* Footer: stats + copy */}
-        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {agentCompletes.map((ac, i) => (
-            <span key={i} style={{ fontSize: 11, color: C.textDim }}>
-              {AGENT_NAMES[ac.agent] || ac.agent}: {ac.durationMs ? `${(ac.durationMs / 1000).toFixed(1)}s` : ''} {ac.tokens ? `(${ac.tokens.input + ac.tokens.output} tokens)` : ''}
-            </span>
-          ))}
-          {msg.content && (
-            <CopyButton text={msg.content} />
-          )}
-        </div>
+        {/* Footer: per-agent stats (verbose only) + copy */}
+        {(msg.content || (verbose && agentCompletes.length > 0)) && (
+          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {verbose && agentCompletes.map((ac, i) => (
+              <span key={i} style={{ fontSize: 11, color: C.textDim }}>
+                {AGENT_NAMES[ac.agent] || ac.agent}: {ac.durationMs ? `${(ac.durationMs / 1000).toFixed(1)}s` : ''} {ac.tokens ? `(${ac.tokens.input + ac.tokens.output} tokens)` : ''}
+              </span>
+            ))}
+            {msg.content && <CopyButton text={msg.content} />}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -766,14 +905,23 @@ function ChatView({ state, dispatch }) {
           <option value="">All projects</option>
           {state.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
-        {state.activeAgents.length > 0 && (
-          <div className="flex gap-1 items-center ml-auto">
+        {state.chatVerbose && state.activeAgents.length > 0 && (
+          <div className="flex gap-1 items-center">
             {state.activeAgents.map((a) => (
               <span key={a} className="typing-dot w-2 h-2 rounded-full" style={{ background: AGENT_COLORS[a] || C.textDim }} title={AGENT_NAMES[a]} />
             ))}
             <span className="text-xs text-muted-foreground ml-1">Working...</span>
           </div>
         )}
+        <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none" title="Show per-agent badges, tool calls, and timing">
+          <input
+            type="checkbox"
+            checked={state.chatVerbose}
+            onChange={(e) => dispatch({ type: 'SET_CHAT_VERBOSE', verbose: e.target.checked })}
+            style={{ accentColor: C.primary }}
+          />
+          Show agent details
+        </label>
       </div>
 
       {/* Messages */}
@@ -790,8 +938,19 @@ function ChatView({ state, dispatch }) {
             </div>
           </div>
         )}
-        {state.chatMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
-        {state.chatStreaming && (
+        {state.chatMessages.map((msg, i) => (
+          <ChatMessage
+            key={msg.id}
+            msg={msg}
+            verbose={state.chatVerbose}
+            streaming={state.chatStreaming && i === state.chatMessages.length - 1}
+            onOpenDrafts={(id) => {
+              dispatch({ type: 'SET_DRAFT_FOCUS', id });
+              dispatch({ type: 'SET_VIEW', view: 'drafts' });
+            }}
+          />
+        ))}
+        {state.chatStreaming && state.chatVerbose && (
           <div className="flex gap-1 px-4 mb-4">
             <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: C.primary, animationDelay: '0s' }} />
             <span className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: C.primary, animationDelay: '0.2s' }} />
@@ -806,6 +965,21 @@ function ChatView({ state, dispatch }) {
         <div className="flex gap-2">
           <Textarea value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+            onPaste={(e) => {
+              // Trim trailing whitespace/newlines from clipboard content so the
+              // textarea doesn't show hidden blank rows below the visible text.
+              const raw = (e.clipboardData || window.clipboardData)?.getData('text');
+              if (!raw || raw === raw.trimEnd()) return; // nothing trailing → let default paste run
+              e.preventDefault();
+              const cleaned = raw.trimEnd();
+              const t = e.target;
+              const start = t.selectionStart || 0;
+              const end = t.selectionEnd || 0;
+              const next = input.slice(0, start) + cleaned + input.slice(end);
+              setInput(next);
+              // Restore caret to end of pasted text after React re-renders.
+              requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = start + cleaned.length; });
+            }}
             placeholder="Ask your AI team..." rows={1}
             className="flex-1 min-h-[44px] max-h-[120px]" />
           {state.chatStreaming ? (
@@ -1090,8 +1264,19 @@ function ProjectChat({ projectId, state, dispatch }) {
       </div>
       <div className="flex-1 overflow-y-auto p-3.5">
         {state.chatMessages.length === 0 && <p className="text-muted-foreground text-sm text-center py-5 italic">Ask your agents about this project.</p>}
-        {state.chatMessages.map((msg) => <ChatMessage key={msg.id} msg={msg} />)}
-        {state.chatStreaming && (
+        {state.chatMessages.map((msg, i) => (
+          <ChatMessage
+            key={msg.id}
+            msg={msg}
+            verbose={state.chatVerbose}
+            streaming={state.chatStreaming && i === state.chatMessages.length - 1}
+            onOpenDrafts={(id) => {
+              dispatch({ type: 'SET_DRAFT_FOCUS', id });
+              dispatch({ type: 'SET_VIEW', view: 'drafts' });
+            }}
+          />
+        ))}
+        {state.chatStreaming && state.chatVerbose && (
           <div className="flex gap-1 py-1">
             <span className="typing-dot w-1 h-1 rounded-full" style={{ background: C.primary }} />
             <span className="typing-dot w-1 h-1 rounded-full" style={{ background: C.primary, animationDelay: '0.2s' }} />
@@ -1103,6 +1288,17 @@ function ProjectChat({ projectId, state, dispatch }) {
       <div className="p-2.5 border-t border-border flex gap-1.5">
         <Textarea value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
+          onPaste={(e) => {
+            const raw = (e.clipboardData || window.clipboardData)?.getData('text');
+            if (!raw || raw === raw.trimEnd()) return;
+            e.preventDefault();
+            const cleaned = raw.trimEnd();
+            const t = e.target;
+            const start = t.selectionStart || 0;
+            const end = t.selectionEnd || 0;
+            setInput(input.slice(0, start) + cleaned + input.slice(end));
+            requestAnimationFrame(() => { t.selectionStart = t.selectionEnd = start + cleaned.length; });
+          }}
           placeholder="Ask about this project..." rows={1} className="flex-1 min-h-[36px] text-sm py-2 px-3" />
         {state.chatStreaming
           ? <Button variant="destructive" size="sm" onClick={() => abortRef.current?.abort()}>Stop</Button>
@@ -2150,6 +2346,91 @@ const RESOURCE_LABELS = {
   contract: { color: '#F472B6', label: 'Contract', endpoint: 'contracts' },
 };
 
+// Renders the actual body of an agent-created document so the owner can
+// review what they're approving without leaving the inbox. Each resource
+// type has a different shape — proposals/contracts use JSONB content,
+// invoices use line_items + total_cents.
+function DraftBody({ resourceType, body }) {
+  if (!body) return null;
+  if (resourceType === 'proposal') {
+    const p = body.proposal || {};
+    const c = p.content || {};
+    return (
+      <div className="space-y-3 text-sm">
+        {c.title && <p className="font-semibold text-foreground">{c.title}</p>}
+        {c.scope_summary && (
+          <div><p className="text-xs text-muted-foreground mb-1">Scope</p><p>{c.scope_summary}</p></div>
+        )}
+        {c.deliverables && (
+          <div><p className="text-xs text-muted-foreground mb-1">Deliverables</p><p>{c.deliverables}</p></div>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          {c.timeline && <div><p className="text-xs text-muted-foreground">Timeline</p><p>{c.timeline}</p></div>}
+          {c.pricing_total_cents != null && <div><p className="text-xs text-muted-foreground">Pricing</p><p>{fmt(c.pricing_total_cents)}</p></div>}
+        </div>
+        {c.notes && (
+          <div><p className="text-xs text-muted-foreground mb-1">Notes</p><p className="whitespace-pre-wrap">{c.notes}</p></div>
+        )}
+      </div>
+    );
+  }
+  if (resourceType === 'invoice') {
+    const inv = body.invoice || {};
+    const items = Array.isArray(inv.line_items) ? inv.line_items : [];
+    return (
+      <div className="space-y-3 text-sm">
+        <div className="grid grid-cols-2 gap-3">
+          <div><p className="text-xs text-muted-foreground">Total</p><p className="font-semibold">{fmt(inv.total_cents)}</p></div>
+          {inv.due_date && <div><p className="text-xs text-muted-foreground">Due</p><p>{new Date(inv.due_date).toLocaleDateString()}</p></div>}
+        </div>
+        {items.length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Line items</p>
+            <div className="space-y-1.5">
+              {items.map((it, i) => (
+                <div key={i} className="flex justify-between gap-3 py-1.5 px-2 rounded" style={{ background: C.bg }}>
+                  <span className="flex-1 truncate">{it.description || '—'}</span>
+                  <span className="text-muted-foreground text-xs">× {it.qty || 1}</span>
+                  <span className="font-mono">{fmt((it.qty || 1) * (it.rate_cents || 0))}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  if (resourceType === 'contract') {
+    const ct = body.contract || {};
+    const c = ct.content || {};
+    const flags = Array.isArray(ct.flags) ? ct.flags : [];
+    const sections = ['scope', 'payment_terms', 'revision_policy', 'ip_ownership', 'termination', 'timeline'];
+    return (
+      <div className="space-y-3 text-sm">
+        {sections.filter((s) => c[s]).map((s) => (
+          <div key={s}>
+            <p className="text-xs text-muted-foreground mb-1 capitalize">{s.replace('_', ' ')}</p>
+            <p className="whitespace-pre-wrap">{c[s]}</p>
+          </div>
+        ))}
+        {flags.length > 0 && (
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Flagged clauses</p>
+            <div className="space-y-1.5">
+              {flags.map((f, i) => (
+                <div key={i} className="px-2 py-1.5 rounded text-xs" style={{ background: C.danger + '14', borderLeft: `2px solid ${C.danger}` }}>
+                  <span className="font-semibold">[{f.severity || '?'}]</span> {f.clause || ''}: {f.explanation || ''}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
+}
+
 function ConfidenceBadge({ score }) {
   if (score == null) return <span className="text-xs text-muted-foreground">no score</span>;
   const n = Number(score);
@@ -2170,6 +2451,9 @@ function DraftsView({ state, dispatch }) {
   const [sendingId, setSendingId] = useState(null);
   const [error, setError] = useState(null);
   const [recentlySent, setRecentlySent] = useState([]);
+  const [expanded, setExpanded] = useState({}); // { [draftId]: { loading, body, error } }
+  const [highlightId, setHighlightId] = useState(null); // briefly pulse the focused row
+  const rowRefs = useRef({});
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -2180,6 +2464,50 @@ function DraftsView({ state, dispatch }) {
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const toggleExpand = useCallback(async (draft) => {
+    const cur = expanded[draft.id];
+    if (cur && (cur.body || cur.error)) {
+      setExpanded((prev) => { const next = { ...prev }; delete next[draft.id]; return next; });
+      return;
+    }
+    setExpanded((prev) => ({ ...prev, [draft.id]: { loading: true } }));
+    try {
+      const body = await api(`/documents/${draft.resource_type}s/${draft.id}`);
+      setExpanded((prev) => ({ ...prev, [draft.id]: { loading: false, body } }));
+    } catch (e) {
+      setExpanded((prev) => ({ ...prev, [draft.id]: { loading: false, error: e.message || 'Load failed' } }));
+    }
+  }, [expanded]);
+
+  const expandWithoutToggle = useCallback(async (draft) => {
+    if (expanded[draft.id]) return;
+    setExpanded((prev) => ({ ...prev, [draft.id]: { loading: true } }));
+    try {
+      const body = await api(`/documents/${draft.resource_type}s/${draft.id}`);
+      setExpanded((prev) => ({ ...prev, [draft.id]: { loading: false, body } }));
+    } catch (e) {
+      setExpanded((prev) => ({ ...prev, [draft.id]: { loading: false, error: e.message || 'Load failed' } }));
+    }
+  }, [expanded]);
+
+  // Consume focus from the chat "Open in Drafts" handoff: scroll to the row,
+  // auto-expand it, pulse a highlight, then clear so revisiting Drafts doesn't
+  // re-focus the same id.
+  useEffect(() => {
+    if (!state.draftFocusId || loading) return;
+    const target = drafts.find((d) => d.id === state.draftFocusId);
+    if (!target) return;
+    expandWithoutToggle(target);
+    requestAnimationFrame(() => {
+      const el = rowRefs.current[target.id];
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    setHighlightId(target.id);
+    const t1 = setTimeout(() => setHighlightId(null), 2200);
+    dispatch({ type: 'SET_DRAFT_FOCUS', id: null });
+    return () => clearTimeout(t1);
+  }, [state.draftFocusId, drafts, loading, expandWithoutToggle, dispatch]);
 
   const handleSend = async (draft) => {
     const meta = RESOURCE_LABELS[draft.resource_type];
@@ -2239,10 +2567,31 @@ function DraftsView({ state, dispatch }) {
         {drafts.map((d) => {
           const meta = RESOURCE_LABELS[d.resource_type] || { color: C.textDim, label: d.resource_type };
           const isSending = sendingId === d.id;
+          const exp = expanded[d.id];
+          const isOpen = !!exp;
+          const isHighlighted = highlightId === d.id;
           return (
-            <Card key={d.id} className="card-hover">
+            <Card
+              key={d.id}
+              ref={(el) => { if (el) rowRefs.current[d.id] = el; }}
+              className="card-hover"
+              style={isHighlighted ? {
+                borderColor: C.primary + '88',
+                boxShadow: `0 0 32px ${C.primary}44`,
+                transition: 'border-color 0.4s ease, box-shadow 0.4s ease'
+              } : undefined}
+            >
               <CardContent className="pt-5 pb-5">
-                <div className="flex items-start gap-4">
+                <div
+                  className="flex items-start gap-4 cursor-pointer"
+                  onClick={() => toggleExpand(d)}
+                  title="Click to preview"
+                >
+                  <ChevronRight
+                    size={16}
+                    className="mt-1 shrink-0 transition-transform"
+                    style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', color: C.textMuted }}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <span style={S.badge(meta.color)}>{meta.label}</span>
@@ -2259,13 +2608,24 @@ function DraftsView({ state, dispatch }) {
                     </div>
                     <div className="mt-3"><ConfidenceBadge score={d.confidence} /></div>
                   </div>
-                  <div className="shrink-0 flex flex-col gap-2 items-end">
+                  <div
+                    className="shrink-0 flex flex-col gap-2 items-end"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <Button onClick={() => handleSend(d)} disabled={isSending} size="sm">
                       <Send size={13} className="mr-1.5" />
                       {isSending ? 'Sending...' : 'Approve & Send'}
                     </Button>
                   </div>
                 </div>
+
+                {isOpen && (
+                  <div className="mt-4 pt-4 border-t" style={{ borderColor: C.border }}>
+                    {exp.loading && <p className="text-xs text-muted-foreground italic">Loading content…</p>}
+                    {exp.error && <p className="text-xs" style={{ color: C.danger }}>{exp.error}</p>}
+                    {exp.body && <DraftBody resourceType={d.resource_type} body={exp.body} />}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
@@ -2294,6 +2654,309 @@ function DraftsView({ state, dispatch }) {
   );
 }
 
+// ─── Memory View ──────────────────────────────────────────────────
+// Owner-facing review surface for the agent memory layer. Pending facts
+// (agent observations) need owner approval before they feed back into
+// future agent runs. Confirmed facts can be edited or deleted at any time.
+const MEMORY_CATEGORY_COLORS = {
+  payment_pref: '#34D399',     // green — financial
+  comm_tone: '#60A5FA',        // blue — voice/style
+  red_flag: '#F87171',         // red — risk
+  pricing_history: '#FBBF24',  // amber — money pattern
+  other: '#94A3B8',            // gray
+};
+
+function MemoryRow({ row, scope, justApproved, onPromote, onSave, onDelete }) {
+  const [editing, setEditing] = useState(false);
+  const [draftValue, setDraftValue] = useState(row.value);
+  const [saving, setSaving] = useState(false);
+  const isPending = row.status === 'pending';
+  const color = MEMORY_CATEGORY_COLORS[row.category] || C.textDim;
+  const sourceColor = row.source === 'owner' ? C.success : C.accent;
+
+  const handleSave = async () => {
+    if (draftValue === row.value) { setEditing(false); return; }
+    setSaving(true);
+    try { await onSave(row, draftValue); setEditing(false); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Card
+      className="card-hover mb-2"
+      style={{
+        borderColor: justApproved ? C.success + '88' : isPending ? C.warning + '66' : undefined,
+        boxShadow: justApproved ? `0 0 24px ${C.success}33` : undefined,
+        transition: 'border-color 0.4s ease, box-shadow 0.4s ease'
+      }}
+    >
+      <CardContent className="pt-4 pb-4">
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
+              <span style={S.badge(color)}>{row.category.replace('_', ' ')}</span>
+              <span className="text-xs font-mono text-muted-foreground">{row.key}</span>
+              <span className="text-[10px] uppercase tracking-wider font-bold" style={{ color: sourceColor }}>
+                {row.source}
+              </span>
+              {row.confidence != null && (
+                <span className="text-xs text-muted-foreground">· {Math.round(Number(row.confidence) * 100)}%</span>
+              )}
+              {isPending && <span style={S.badge(C.warning)}>pending</span>}
+              {justApproved && (
+                <span className="flex items-center gap-1 text-xs" style={{ color: C.success }}>
+                  <Check size={12} /> approved
+                </span>
+              )}
+            </div>
+            {editing ? (
+              <Textarea
+                value={draftValue}
+                onChange={(e) => setDraftValue(e.target.value.slice(0, 120))}
+                className="text-sm"
+                rows={2}
+                autoFocus
+              />
+            ) : (
+              <p className="text-sm text-foreground">{row.value}</p>
+            )}
+            {editing && (
+              <p className="text-[10px] text-muted-foreground mt-1">{draftValue.length}/120 chars</p>
+            )}
+          </div>
+          <div className="shrink-0 flex flex-col gap-1.5 items-end">
+            {editing ? (
+              <>
+                <Button size="sm" onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</Button>
+                <Button size="sm" variant="outline" onClick={() => { setEditing(false); setDraftValue(row.value); }} disabled={saving}>Cancel</Button>
+              </>
+            ) : (
+              <>
+                {isPending && (
+                  <Button size="sm" onClick={() => onPromote(row, scope)}>
+                    <Check size={13} className="mr-1" /> Approve
+                  </Button>
+                )}
+                <Button size="sm" variant="outline" onClick={() => setEditing(true)}>
+                  <Pencil size={12} className="mr-1" /> Edit
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => onDelete(row, scope)}
+                  style={{ color: C.danger, borderColor: C.danger + '44' }}>
+                  <Trash2 size={12} />
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MemoryView({ state, dispatch }) {
+  const [tab, setTab] = useState('clients');
+  const [workspace, setWorkspace] = useState([]);
+  const [clientsMemory, setClientsMemory] = useState({}); // { client_id: { client_name, rows[] } }
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  // Track ids that were just approved so we can show a brief green pulse
+  // without doing a full re-fetch + reflow.
+  const [justApproved, setJustApproved] = useState(new Set());
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const wsData = await api('/memory/workspace');
+      setWorkspace(wsData.memory || []);
+      let clients = state.clients;
+      if (!clients || clients.length === 0) {
+        const cd = await api('/clients');
+        clients = cd.clients || [];
+      }
+      const byClient = {};
+      await Promise.all(clients.map(async (c) => {
+        const r = await api(`/memory/clients/${c.id}`);
+        if (r.memory && r.memory.length > 0) byClient[c.id] = { client_name: c.name, rows: r.memory };
+      }));
+      setClientsMemory(byClient);
+    } catch (e) {
+      setError(e.message || 'Failed to load memory');
+    } finally {
+      setLoading(false);
+    }
+  }, [state.clients]);
+
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Optimistic local update — single row, no full re-fetch, no reflow.
+  // We mutate the relevant client's row in place (or workspace row) and let
+  // React reconcile only the affected card. The server is the source of truth
+  // on errors — we revert from a snapshot if the PATCH/DELETE fails.
+  const handlePromote = async (row, scope) => {
+    const snapshotClients = clientsMemory;
+    const snapshotWorkspace = workspace;
+    if (scope === 'workspace') {
+      setWorkspace((prev) => prev.map((r) => (r.id === row.id ? { ...r, status: 'confirmed' } : r)));
+    } else {
+      setClientsMemory((prev) => {
+        const next = { ...prev };
+        for (const cid of Object.keys(next)) {
+          next[cid] = { ...next[cid], rows: next[cid].rows.map((r) => (r.id === row.id ? { ...r, status: 'confirmed' } : r)) };
+        }
+        return next;
+      });
+    }
+    setJustApproved((prev) => new Set(prev).add(row.id));
+    setTimeout(() => setJustApproved((prev) => { const next = new Set(prev); next.delete(row.id); return next; }), 2500);
+    try {
+      await api(`/memory/${row.id}`, { method: 'PATCH', body: { scope, status: 'confirmed' } });
+    } catch (e) {
+      setError(e.message || 'Approve failed — reverted');
+      setClientsMemory(snapshotClients);
+      setWorkspace(snapshotWorkspace);
+    }
+  };
+
+  const handleSave = async (row, newValue) => {
+    const inferredScope = workspace.find((w) => w.id === row.id) ? 'workspace' : 'client';
+    const snapshotClients = clientsMemory;
+    const snapshotWorkspace = workspace;
+    if (inferredScope === 'workspace') {
+      setWorkspace((prev) => prev.map((r) => (r.id === row.id ? { ...r, value: newValue } : r)));
+    } else {
+      setClientsMemory((prev) => {
+        const next = { ...prev };
+        for (const cid of Object.keys(next)) {
+          next[cid] = { ...next[cid], rows: next[cid].rows.map((r) => (r.id === row.id ? { ...r, value: newValue } : r)) };
+        }
+        return next;
+      });
+    }
+    try {
+      await api(`/memory/${row.id}`, { method: 'PATCH', body: { scope: inferredScope, value: newValue } });
+    } catch (e) {
+      setError(e.message || 'Save failed — reverted');
+      setClientsMemory(snapshotClients);
+      setWorkspace(snapshotWorkspace);
+    }
+  };
+
+  const handleDelete = async (row, scope) => {
+    if (!confirm(`Delete this ${row.category.replace('_', ' ')} fact?`)) return;
+    const snapshotClients = clientsMemory;
+    const snapshotWorkspace = workspace;
+    if (scope === 'workspace') {
+      setWorkspace((prev) => prev.filter((r) => r.id !== row.id));
+    } else {
+      setClientsMemory((prev) => {
+        const next = {};
+        for (const cid of Object.keys(prev)) {
+          const filtered = prev[cid].rows.filter((r) => r.id !== row.id);
+          if (filtered.length > 0) next[cid] = { ...prev[cid], rows: filtered };
+        }
+        return next;
+      });
+    }
+    try {
+      await api(`/memory/${row.id}?scope=${scope}`, { method: 'DELETE' });
+    } catch (e) {
+      setError(e.message || 'Delete failed — reverted');
+      setClientsMemory(snapshotClients);
+      setWorkspace(snapshotWorkspace);
+    }
+  };
+
+  // Counts derive from local state — no separate fetch, always in sync with
+  // optimistic updates above.
+  const pendingCount =
+    workspace.filter((r) => r.status === 'pending').length +
+    Object.values(clientsMemory).reduce((sum, g) => sum + g.rows.filter((r) => r.status === 'pending').length, 0);
+  const clientCount = Object.keys(clientsMemory).length;
+  const workspaceCount = workspace.length;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <div className="flex items-center gap-3 mb-2">
+            <Brain size={20} style={{ color: C.primary }} />
+            <h1 className="text-2xl font-bold text-foreground">Agent Memory</h1>
+            {pendingCount > 0 && <span style={S.badge(C.warning)}>{pendingCount} pending review</span>}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            What your agents have learned. Pending facts are agent observations awaiting your approval — they don't influence future runs until you confirm them.
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
+          {loading ? 'Refreshing...' : 'Refresh'}
+        </Button>
+      </div>
+
+      {error && (
+        <Card className="mb-4" style={{ borderColor: C.danger + '66' }}>
+          <CardContent className="pt-4 pb-4 flex items-center gap-3">
+            <AlertTriangle size={16} style={{ color: C.danger }} />
+            <span className="text-sm" style={{ color: C.danger }}>{error}</span>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="flex gap-2 mb-5">
+        <Button variant={tab === 'clients' ? 'default' : 'outline'} size="sm" onClick={() => setTab('clients')}>
+          By Client {clientCount > 0 && <span className="ml-1.5 opacity-60">({clientCount})</span>}
+        </Button>
+        <Button variant={tab === 'workspace' ? 'default' : 'outline'} size="sm" onClick={() => setTab('workspace')}>
+          Workspace {workspaceCount > 0 && <span className="ml-1.5 opacity-60">({workspaceCount})</span>}
+        </Button>
+      </div>
+
+      {loading && <p className="text-muted-foreground italic text-center py-10">Loading memory…</p>}
+
+      {!loading && tab === 'clients' && (
+        <>
+          {clientCount === 0 ? (
+            <Card>
+              <CardContent className="pt-10 pb-10 text-center">
+                <Brain size={32} className="mx-auto mb-3 opacity-40" />
+                <p className="text-foreground font-medium mb-1">No client memory yet</p>
+                <p className="text-sm text-muted-foreground">As agents work on projects, they'll record patterns about each client here for your review.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            Object.entries(clientsMemory).map(([cid, group]) => (
+              <div key={cid} className="mb-6">
+                <p className="text-sm font-semibold text-foreground mb-3">{group.client_name}</p>
+                {group.rows.map((row) => (
+                  <MemoryRow key={row.id} row={row} scope="client" justApproved={justApproved.has(row.id)} onPromote={handlePromote} onSave={handleSave} onDelete={handleDelete} />
+                ))}
+              </div>
+            ))
+          )}
+        </>
+      )}
+
+      {!loading && tab === 'workspace' && (
+        <>
+          {workspace.length === 0 ? (
+            <Card>
+              <CardContent className="pt-10 pb-10 text-center">
+                <Brain size={32} className="mx-auto mb-3 opacity-40" />
+                <p className="text-foreground font-medium mb-1">No workspace memory yet</p>
+                <p className="text-sm text-muted-foreground">Workspace facts apply across all clients (your default rates, common red flags, etc.).</p>
+              </CardContent>
+            </Card>
+          ) : (
+            workspace.map((row) => (
+              <MemoryRow key={row.id} row={row} scope="workspace" justApproved={justApproved.has(row.id)} onPromote={handlePromote} onSave={handleSave} onDelete={handleDelete} />
+            ))
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [showLanding, setShowLanding] = useState(true);
@@ -2304,11 +2967,28 @@ export default function App() {
     return <ClientPortalView token={portalMatch[1]} />;
   }
 
-  // Boot: validate stored token
+  // Boot: validate stored token, then re-fetch project_detail if that's the
+  // restored view (so a hard refresh on a project page doesn't drop you back
+  // to the dashboard).
   useEffect(() => {
     if (state.token && !state.user) {
       api('/auth/me')
-        .then(({ user }) => dispatch({ type: 'SET_AUTH', user, token: state.token }))
+        .then(({ user }) => {
+          dispatch({ type: 'SET_AUTH', user, token: state.token });
+          const savedView = localStorage.getItem('currentView');
+          const savedProjectId = localStorage.getItem('selectedProjectId');
+          if (savedView === 'project_detail' && savedProjectId) {
+            dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' });
+            api(`/projects/${savedProjectId}`)
+              .then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data }))
+              .catch(() => {
+                // Project gone (deleted or no access) — clear stale id and fall
+                // back to dashboard so we don't strand on "Loading project..."
+                localStorage.removeItem('selectedProjectId');
+                dispatch({ type: 'SET_VIEW', view: 'dashboard' });
+              });
+          }
+        })
         .catch(() => { localStorage.removeItem('token'); dispatch({ type: 'LOGOUT' }); });
     }
   }, []);
@@ -2319,6 +2999,7 @@ export default function App() {
     .btn-outline:hover { background: rgba(37,99,235,0.08) !important; border-color: rgba(37,99,235,0.6) !important; color: #93C5FD !important; }
     .nav-item:hover { background: ${C.surfaceHover}; }
     input:focus, textarea:focus, select:focus { border-color: #2563EB !important; box-shadow: 0 0 0 3px rgba(37,99,235,0.15) !important; outline: none; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   `;
 
   // Error boundary for debugging
@@ -2340,6 +3021,7 @@ export default function App() {
     clients: ClientsView,
     kanban: KanbanView,
     drafts: DraftsView,
+    memory: MemoryView,
     onboarding: OnboardingView,
     activity: ActivityLogView,
   };
