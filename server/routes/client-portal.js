@@ -2,6 +2,7 @@ import { Router } from 'express';
 import db from '../db.js';
 import { validate } from '../middleware/validate.js';
 import { rejectMilestoneSchema } from '../schemas/index.js';
+import { triggerInvoiceFromMilestone } from '../agents/auto-triggers.js';
 
 const router = Router();
 
@@ -70,6 +71,14 @@ router.post('/:token/milestones/:id/approve', async (req, res) => {
      WHERE project_id = $1 AND status = 'pending'
      AND position = (SELECT MIN(position) FROM milestones WHERE project_id = $1 AND status = 'pending')`,
     [portal.project_id]
+  );
+
+  // Auto-trigger: client-side approval → invoice draft for the freelancer
+  // (owner of the project, resolved via portal.user_id). Fire-and-forget.
+  // Trigger module catches its own runtime errors; anything reaching .catch
+  // here is a programming bug worth surfacing in server logs.
+  triggerInvoiceFromMilestone(portal.user_id, updated).catch((err) =>
+    console.error('[auto-trigger] portal milestone→invoice failed:', err?.message || err)
   );
 
   res.json({ milestone: updated });

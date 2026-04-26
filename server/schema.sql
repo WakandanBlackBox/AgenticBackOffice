@@ -237,6 +237,29 @@ CREATE INDEX IF NOT EXISTS idx_client_memory_user_client ON client_memory(user_i
 CREATE INDEX IF NOT EXISTS idx_client_memory_user_status ON client_memory(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_workspace_memory_user_status ON workspace_memory(user_id, status);
 
+-- =============================================================================
+-- Automation runs — Phase 1D audit trail. Records every auto-triggered agent
+-- run (e.g. milestone approved → invoice drafted, proposal accepted →
+-- contract drafted) so the owner can see WHY a draft showed up unprompted.
+-- Distinct from agent_logs (which records ALL runs, manual + auto) because
+-- it captures the trigger context (what user/system action caused this).
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS automation_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  trigger_type TEXT NOT NULL CHECK (trigger_type IN ('milestone_approved','proposal_accepted','invoice_overdue')),
+  trigger_resource_type TEXT NOT NULL CHECK (trigger_resource_type IN ('milestone','proposal','invoice')),
+  trigger_resource_id UUID,
+  action_agent TEXT NOT NULL,
+  draft_id UUID,
+  draft_resource_type TEXT,
+  status TEXT NOT NULL CHECK (status IN ('success','failed','budget_blocked','skipped')),
+  error TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_runs_user_created ON automation_runs(user_id, created_at DESC);
+
 -- Indexes for the new approval-flow queries (drafts inbox, ROI)
 CREATE INDEX IF NOT EXISTS idx_proposals_user_status ON proposals(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_contracts_user_status ON contracts(user_id, status);

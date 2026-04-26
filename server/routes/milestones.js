@@ -4,6 +4,7 @@ import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { createMilestoneSchema, updateMilestoneSchema, createShareTokenSchema } from '../schemas/index.js';
+import { triggerInvoiceFromMilestone } from '../agents/auto-triggers.js';
 
 const router = Router();
 
@@ -99,6 +100,13 @@ router.post('/:id/complete', async (req, res) => {
        WHERE project_id = $1 AND status = 'pending'
        AND position = (SELECT MIN(position) FROM milestones WHERE project_id = $1 AND status = 'pending')`,
       [milestone.project_id]
+    );
+    // Auto-trigger: milestone approved → invoice draft (fire-and-forget).
+    // Surface unexpected throws to server logs — the trigger module catches
+    // its own runtime errors into automation_runs, so anything reaching here
+    // is a genuine import/programming bug worth investigating.
+    triggerInvoiceFromMilestone(req.user.id, updated).catch((err) =>
+      console.error('[auto-trigger] milestone→invoice failed:', err?.message || err)
     );
     return res.json({ milestone: updated, auto_approved: true });
   }
