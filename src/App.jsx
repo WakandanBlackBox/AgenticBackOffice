@@ -12,6 +12,7 @@ import {
   BookOpen, Activity, LogOut, Search, Bell, TrendingUp, DollarSign,
   Clock, AlertTriangle, ChevronRight, UserCheck, Zap, Cpu, Timer, Plus,
   Mail, Building2, ChevronDown, Check, X, Inbox, ShieldCheck, Send, Brain, Trash2, Pencil,
+  AlertCircle, Calculator, FileText, Sparkles,
 } from 'lucide-react';
 
 // ─── Colors ────────────────────────────────────────────────────────
@@ -155,6 +156,10 @@ const initialState = {
   // mount. Cleared by DraftsView once consumed so revisiting Drafts doesn't
   // keep re-focusing an old item.
   draftFocusId: null,
+  // Transient: a prompt the chat input should auto-populate on next render.
+  // Set by one-click outcome cards on the Dashboard. ChatView consumes it
+  // and immediately clears so navigating away + back doesn't re-fill.
+  chatPrompt: null,
   projects: [], projectsLoading: false,
   selectedProject: null, projectDetailLoading: false,
   clients: [], clientsLoading: false, showClientForm: false, editingClient: null,
@@ -190,6 +195,7 @@ function reducer(state, action) {
       return { ...state, chatVerbose: action.verbose };
     }
     case 'SET_DRAFT_FOCUS': return { ...state, draftFocusId: action.id || null };
+    case 'SET_CHAT_PROMPT': return { ...state, chatPrompt: action.prompt || null };
     case 'SET_AUTH_MODE': return { ...state, authMode: action.mode, authError: null };
     case 'SET_AUTH_ERROR': return { ...state, authError: action.error };
     case 'SET_DASHBOARD': return { ...state, dashboard: action.data, dashboardLoading: false };
@@ -567,6 +573,166 @@ function KPICard({ label, value, color, subtitle, icon: Icon }) {
   );
 }
 
+// ─── One-Click Outcomes ──────────────────────────────────────────
+// Curated entry points to the chat agents. Each card prefills a focused
+// prompt and navigates to AI Chat. The "draft from notes" card opens a
+// modal first to collect the freeform notes since they're typically pasted.
+// Prompts are crafted so the dispatcher's keyword router picks a SINGLE
+// specialist agent instead of falling through to Chief (which would burn
+// extra tokens delegating). Specifically: avoid using keywords from more
+// than one agent's intentPatterns in the same prompt.
+const ONE_CLICK_ACTIONS = [
+  {
+    id: 'overdue',
+    icon: AlertCircle,
+    color: '#F87171',
+    title: 'Recover late payments',
+    description: 'See every overdue payment + recommended next steps.',
+    // 'overdue' + 'summary' both hit Insight only. Avoid 'invoice' (Invoice agent).
+    prompt: 'Summary of all overdue accounts. For each one, recommend the right next step (gentle nudge, formal follow-up, or escalation).'
+  },
+  {
+    id: 'pricing',
+    icon: Calculator,
+    color: '#FBBF24',
+    title: 'Get pricing advice',
+    description: 'Pick a project — get a defensible price calculation.',
+    // 'estimate' + 'proposal' both hit Proposal only. Avoid 'rate' / 'invoice'.
+    prompt: 'Estimate pricing for this project as a proposal. Walk through your assumptions on hours and complexity, then recommend a defensible total.',
+    needsProject: true
+  },
+  {
+    id: 'scope',
+    icon: ShieldCheck,
+    color: '#60A5FA',
+    title: 'Spot scope creep risk',
+    description: 'Review a project for scope creep patterns + red flags.',
+    // 'scope' + 'scope creep' + 'creep' all hit Scope Guardian only.
+    // Avoid 'contract' (Contract agent) — say "agreement" or "SOW" instead.
+    prompt: 'Identify scope creep risk on this project. Look at past scope events and any client patterns I should watch for.',
+    needsProject: true
+  },
+  {
+    id: 'notes',
+    icon: FileText,
+    color: '#A78BFA',
+    title: 'Draft proposal from notes',
+    description: 'Paste raw notes — get a polished proposal in Drafts.',
+    needsNotes: true
+  }
+];
+
+function OneClickCards({ dispatch }) {
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notes, setNotes] = useState('');
+
+  const handleClick = (action) => {
+    if (action.needsNotes) {
+      setNotesOpen(true);
+      return;
+    }
+    dispatch({ type: 'SET_CHAT_PROMPT', prompt: action.prompt });
+    dispatch({ type: 'SET_VIEW', view: 'chat' });
+  };
+
+  const handleNotesSubmit = () => {
+    if (!notes.trim()) return;
+    dispatch({
+      type: 'SET_CHAT_PROMPT',
+      // Avoid triggering other agents via substring matches in the dispatcher's
+      // routeToAgent (which uses q.includes(p) — "Extract" matches "extra"
+      // from scope_guardian's intentPatterns!). Stick to safe verbs and avoid
+      // the bare word "scope" / "contract" / "invoice" / "extra" in the prefix.
+      // User-pasted notes may still contain trigger words; Chief picks up the
+      // slack in that case (also valid).
+      prompt: `Generate a proposal estimate from these notes. Pull out deliverables, timeline, and pricing; flag anything ambiguous. Notes:\n\n${notes.trim()}`
+    });
+    dispatch({ type: 'SET_VIEW', view: 'chat' });
+    setNotesOpen(false);
+    setNotes('');
+  };
+
+  return (
+    <div className="mb-8">
+      <div className="flex items-center gap-3 mb-3">
+        <Sparkles size={16} style={{ color: C.primary }} />
+        <p className="text-xs font-bold uppercase tracking-widest" style={{ color: C.text }}>
+          One-Click Outcomes
+        </p>
+        <span className="text-xs text-muted-foreground">— skip the prompt, get the result</span>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {ONE_CLICK_ACTIONS.map((a) => {
+          const Icon = a.icon;
+          return (
+            <button
+              key={a.id}
+              onClick={() => handleClick(a)}
+              className="text-left rounded-2xl p-5 transition-all hover:-translate-y-px"
+              style={{
+                background: C.surface,
+                border: `1px solid ${C.border}`,
+                cursor: 'pointer',
+                minHeight: 148
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = a.color + '99'; e.currentTarget.style.boxShadow = `0 0 24px ${a.color}22`; }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none'; }}
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3"
+                style={{ background: a.color + '1A' }}>
+                <Icon size={18} style={{ color: a.color }} />
+              </div>
+              <p className="text-sm font-bold text-foreground mb-1">{a.title}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{a.description}</p>
+              {a.needsProject && (
+                <p className="text-[10px] uppercase tracking-wider mt-3 opacity-70" style={{ color: a.color }}>
+                  pick project in chat
+                </p>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {notesOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-6"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setNotesOpen(false)}
+        >
+          <div
+            className="rounded-2xl p-6 w-full max-w-xl"
+            style={{ background: C.surface, border: `1px solid ${C.border}` }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <FileText size={18} style={{ color: '#A78BFA' }} />
+              <p className="text-base font-bold text-foreground">Draft proposal from notes</p>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Paste meeting notes, scope chat, or a back-of-napkin brief. The proposal will land in Drafts for review.
+            </p>
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Client wants a 6-page marketing site, brand identity, social templates. Budget around $15k. Timeline 8 weeks. Wants weekly check-ins on Fridays..."
+              rows={8}
+              autoFocus
+              className="text-sm"
+            />
+            <div className="flex justify-end gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => { setNotesOpen(false); setNotes(''); }}>Cancel</Button>
+              <Button size="sm" onClick={handleNotesSubmit} disabled={!notes.trim()}>
+                <Sparkles size={13} className="mr-1" /> Send to Chat
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ROI tile cards. Distinct from KPICard because they need null-state messaging
 // ("Need more data") rather than rendering 0 — judges asked for "evidence", and
 // a fake "$0 saved" undermines the trust narrative more than no number at all.
@@ -670,6 +836,8 @@ function DashboardView({ state, dispatch }) {
         <KPICard label="Revenue (30d)" value={fmt(kpis.paid_cents)} color={C.accent} icon={DollarSign} />
         <KPICard label="Outstanding" value={fmt(kpis.outstanding_cents)} color={C.accent} subtitle={kpis.overdue_count ? `${kpis.overdue_count} overdue` : undefined} icon={Clock} />
       </div>
+
+      <OneClickCards dispatch={dispatch} />
 
       {roiCards && (
         <div className="mb-8">
@@ -959,6 +1127,16 @@ function ChatView({ state, dispatch }) {
       api('/projects').then(({ projects }) => dispatch({ type: 'SET_PROJECTS', projects })).catch(() => {});
     }
   }, []);
+
+  // Consume one-click outcome handoff: a card click on the dashboard sets
+  // state.chatPrompt; we populate the input and clear the transient state
+  // so navigating away + back doesn't re-fill.
+  useEffect(() => {
+    if (state.chatPrompt) {
+      setInput(state.chatPrompt);
+      dispatch({ type: 'SET_CHAT_PROMPT', prompt: null });
+    }
+  }, [state.chatPrompt, dispatch]);
 
   // Auto-scroll
   useEffect(() => {
