@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { triggerOnboardFromAcceptedProposal } from '../agents/auto-triggers.js';
 
 const router = Router();
 
@@ -27,12 +28,27 @@ router.get('/proposals/:id', async (req, res) => {
 
 router.patch('/proposals/:id', async (req, res) => {
   const { status, content } = req.body;
+  // Snapshot the prior status so we can detect a transition into 'accepted'
+  // and fire the onboarding auto-triggers (contract + deposit invoice).
+  const prior = await db.one('SELECT status FROM proposals WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  if (!prior) return res.status(404).json({ error: 'Not found' });
+
   const sets = []; const vals = [req.params.id, req.user.id];
   if (status) { sets.push(`status = $${vals.length + 1}`); vals.push(status); }
   if (content) { sets.push(`content = $${vals.length + 1}`); vals.push(JSON.stringify(content)); }
   if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
   const row = await db.one(`UPDATE proposals SET ${sets.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`, vals);
   if (!row) return res.status(404).json({ error: 'Not found' });
+
+  // Auto-trigger on the transition INTO 'accepted' only — re-PATCHing an
+  // already-accepted proposal should not re-fire (the dedup window in the
+  // trigger module also guards this).
+  if (status === 'accepted' && prior.status !== 'accepted') {
+    triggerOnboardFromAcceptedProposal(req.user.id, row).catch((err) =>
+      console.error('[auto-trigger] proposal→onboarding failed:', err?.message || err)
+    );
+  }
+
   res.json({ proposal: row });
 });
 
