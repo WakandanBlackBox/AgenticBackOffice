@@ -74,6 +74,13 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
 
   yield { type: 'agent_start', agent: agent.id, name: agent.name };
 
+  // Track whether we've emitted any user-visible text. If the model exits
+  // without emitting a final answer (rare but happens — model treats the
+  // last tool call as the end), we emit a deterministic fallback so the user
+  // is never left staring at an empty bubble.
+  let emittedText = false;
+  let lastSaveResult = null;
+
   // System prompt with cache_control -- cached after first call, saving ~90% on re-reads
   const systemWithCache = [
     { type: 'text', text: agent.system, cache_control: { type: 'ephemeral' } }
@@ -110,14 +117,22 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
     for (const block of response.content) {
       if (block.type === 'text') {
         textBlocks.push(block.text);
-        yield { type: 'text', content: block.text };
       } else if (block.type === 'tool_use') {
         toolUseBlocks.push(block);
       }
     }
 
-    // If no tool calls, we're done
-    if (toolUseBlocks.length === 0) break;
+    // Emit text only on the FINAL iteration (no tool calls = the model's final
+    // answer). Intermediate text is "Now I'll X..."-style narration that the
+    // model produces between tool calls — it's noise, never the actual summary.
+    // The model's final answer always comes in a turn with no tool_use blocks.
+    if (toolUseBlocks.length === 0) {
+      for (const txt of textBlocks) {
+        yield { type: 'text', content: txt };
+        if (txt && txt.trim()) emittedText = true;
+      }
+      break;
+    }
 
     // Execute tools and feed results back
     messages.push({ role: 'assistant', content: response.content });
@@ -139,12 +154,55 @@ export async function* runAgent(agentId, userId, userMessage, projectId, { depth
 
       yield { type: 'tool_result', tool: toolUse.name, result };
       toolResults.push({ type: 'tool_result', tool_use_id: toolUse.id, content: capResultSize(JSON.stringify(result)) });
+
+      // Track the most recent save + the confidence the agent assigned to it.
+      // Used after the loop to emit a draft_saved card event the chat UI
+      // renders as a clickable confirmation, plus a fallback if the model
+      // exits silently.
+      if (result?.success && /^(save_proposal|create_invoice|save_contract|draft_email)$/.test(toolUse.name)) {
+        lastSaveResult = { tool: toolUse.name, data: result.data, input: toolUse.input };
+      }
+      if (result?.success && toolUse.name === 'set_confidence' && lastSaveResult) {
+        // Match by resource id when possible
+        if (toolUse.input?.resource_id === lastSaveResult.data?.id) {
+          lastSaveResult.confidence = toolUse.input?.score;
+        }
+      }
     }
 
     messages.push({ role: 'user', content: toolResults });
 
     // If stop_reason is end_turn, break
     if (response.stop_reason === 'end_turn') break;
+  }
+
+  // Whenever a save tool ran successfully, emit a structured draft_saved
+  // event so the chat UI can render a clickable confirmation card with a
+  // jump-to-Drafts button — much better UX than a wall of text.
+  if (lastSaveResult) {
+    const t = lastSaveResult.tool;
+    const resource_type = t === 'save_proposal' ? 'proposal'
+      : t === 'create_invoice' ? 'invoice'
+      : t === 'save_contract' ? 'contract'
+      : t === 'draft_email' ? 'email_draft'
+      : 'document';
+    const input = lastSaveResult.input || {};
+    const title = input.title
+      || (resource_type === 'invoice' ? 'New invoice' : null)
+      || (input.content && typeof input.content === 'object' ? input.content.title : null)
+      || 'Saved draft';
+    const amount_cents = input.pricing_total_cents ?? input.total_cents ?? null;
+    yield {
+      type: 'draft_saved',
+      resource_type,
+      resource_id: lastSaveResult.data?.id,
+      title,
+      amount_cents,
+      confidence: lastSaveResult.confidence ?? null
+    };
+    emittedText = true; // card serves as the user-visible confirmation
+  } else if (!emittedText) {
+    yield { type: 'text', content: '_(No response from agent — try rephrasing.)_' };
   }
 
   const durationMs = Date.now() - startTime;
