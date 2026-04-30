@@ -12,8 +12,9 @@ import {
   BookOpen, Activity, LogOut, Search, Bell, TrendingUp, DollarSign,
   Clock, AlertTriangle, ChevronRight, UserCheck, Zap, Cpu, Timer, Plus,
   Mail, Building2, ChevronDown, Check, X, Inbox, ShieldCheck, Send, Brain, Trash2, Pencil,
-  AlertCircle, Calculator, FileText, Sparkles,
+  AlertCircle, Calculator, FileText, Sparkles, Menu,
 } from 'lucide-react';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 // ─── Colors ────────────────────────────────────────────────────────
 const C = {
@@ -145,7 +146,7 @@ const streamChat = async (message, projectId, dispatch, abortSignal) => {
 // ─── Reducer ──────────────────────────────────────────────────────
 const initialState = {
   view: 'auth', user: null, token: localStorage.getItem('token'),
-  authMode: 'login', authError: null,
+  authMode: 'login', authError: null, mobileNavOpen: false,
   dashboard: null, dashboardLoading: false,
   chatMessages: [], chatStreaming: false, chatProjectId: null, activeAgents: [],
   // Verbose chat: show per-agent badges, delegations, tool-call pills, and
@@ -197,6 +198,8 @@ function reducer(state, action) {
     case 'SET_DRAFT_FOCUS': return { ...state, draftFocusId: action.id || null };
     case 'SET_CHAT_PROMPT': return { ...state, chatPrompt: action.prompt || null };
     case 'SET_AUTH_MODE': return { ...state, authMode: action.mode, authError: null };
+    case 'TOGGLE_MOBILE_NAV': return { ...state, mobileNavOpen: !state.mobileNavOpen };
+    case 'CLOSE_MOBILE_NAV': return { ...state, mobileNavOpen: false };
     case 'SET_AUTH_ERROR': return { ...state, authError: action.error };
     case 'SET_DASHBOARD': return { ...state, dashboard: action.data, dashboardLoading: false };
     case 'SET_DASHBOARD_LOADING': return { ...state, dashboardLoading: true };
@@ -403,12 +406,10 @@ function AuthView({ state, dispatch }) {
 }
 
 // ─── Sidebar ──────────────────────────────────────────────────────
-function Sidebar({ state, dispatch }) {
+function useSidebarData(state) {
   const [draftsCount, setDraftsCount] = useState(0);
   const [memoryPendingCount, setMemoryPendingCount] = useState(0);
 
-  // Poll the drafts + pending-memory queues every 30s so the badges stay fresh
-  // after agent runs and approve-and-send actions in other views.
   useEffect(() => {
     if (!state.user) return;
     let cancelled = false;
@@ -439,10 +440,20 @@ function Sidebar({ state, dispatch }) {
     ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : (user?.email || '?')[0].toUpperCase();
 
+  return { navItems, user, initials, draftsCount, memoryPendingCount };
+}
+
+// Shared nav content rendered in both the static sidebar and the mobile Sheet drawer
+function SidebarNavContent({ state, dispatch, navItems, user, initials, collapsed = false, onNavClick }) {
+  const handleNav = (view) => {
+    dispatch({ type: 'SET_VIEW', view });
+    if (onNavClick) onNavClick();
+  };
+
   return (
-    <div className="w-[240px] shrink-0 flex flex-col border-r border-border" style={{ background: C.surface }}>
+    <>
       {/* Logo */}
-      <div className="h-16 px-5 flex items-center gap-3 border-b border-border shrink-0">
+      <div className={cn('h-16 flex items-center gap-3 border-b border-border shrink-0', collapsed ? 'justify-center px-2' : 'px-5')}>
         <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0" style={{ background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)', boxShadow: '0 0 18px rgba(37,99,235,0.45)' }}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="2" y="5" width="16" height="11" rx="2" stroke="white" strokeWidth="1.5" fill="none"/>
@@ -452,56 +463,65 @@ function Sidebar({ state, dispatch }) {
             <path d="M10 10.5 L5.5 12.5" stroke="white" strokeWidth="1.25" strokeLinecap="round" opacity="0.6"/>
           </svg>
         </div>
-        <p className="text-base font-extrabold tracking-tight text-foreground">BackOffice</p>
+        {!collapsed && <p className="text-base font-extrabold tracking-tight text-foreground">BackOffice</p>}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 py-4 px-3 flex flex-col gap-0.5">
+      <nav className={cn('flex-1 py-4 flex flex-col gap-0.5', collapsed ? 'px-2' : 'px-3')}>
         {navItems.map((item) => {
           if (item.id === '_divider') return <div key="_divider" className="my-2 mx-1 h-px" style={{ background: C.border }} />;
           const active = state.view === item.id || (item.id === 'projects' && state.view === 'project_detail');
           const { Icon } = item;
           return (
             <button key={item.id}
+              title={collapsed ? item.label : undefined}
               className={cn(
-                'flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-sm text-left transition-all group',
-                active
-                  ? 'text-foreground font-semibold'
-                  : 'text-muted-foreground hover:text-foreground font-medium'
+                'flex items-center w-full py-2.5 rounded-xl text-sm transition-all group',
+                collapsed ? 'relative justify-center px-2' : 'gap-3 px-3 text-left',
+                active ? 'text-foreground font-semibold' : 'text-muted-foreground hover:text-foreground font-medium'
               )}
               style={{ background: active ? C.primary + '18' : 'transparent', border: 'none', cursor: 'pointer' }}
-              onClick={() => dispatch({ type: 'SET_VIEW', view: item.id })}>
+              onClick={() => handleNav(item.id)}>
               <span className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors"
                 style={{ background: active ? C.primary + '22' : 'transparent' }}>
                 <Icon size={17} style={{ color: active ? C.primary : 'inherit' }} />
               </span>
-              <span className="flex-1">{item.label}</span>
-              {item.id === 'chat' && state.chatStreaming && (
-                <span className="typing-dot w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.primary }} />
+              {!collapsed && (
+                <>
+                  <span className="flex-1">{item.label}</span>
+                  {item.id === 'chat' && state.chatStreaming && (
+                    <span className="typing-dot w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.primary }} />
+                  )}
+                  {item.badge > 0 && (
+                    <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: C.warning + '22', color: C.warning, minWidth: 18, textAlign: 'center' }}>
+                      {item.badge}
+                    </span>
+                  )}
+                  {active && <ChevronRight size={14} className="shrink-0 opacity-40" />}
+                </>
               )}
-              {item.badge > 0 && (
-                <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                  style={{ background: C.warning + '22', color: C.warning, minWidth: 18, textAlign: 'center' }}>
-                  {item.badge}
-                </span>
+              {collapsed && item.badge > 0 && (
+                <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full" style={{ background: C.warning }} />
               )}
-              {active && <ChevronRight size={14} className="shrink-0 opacity-40" />}
             </button>
           );
         })}
       </nav>
 
       {/* User profile */}
-      <div className="p-3 border-t border-border shrink-0">
-        <div className="flex items-center gap-2.5 rounded-xl p-2.5" style={{ background: C.bg }}>
+      <div className={cn('border-t border-border shrink-0', collapsed ? 'p-2' : 'p-3')}>
+        <div className={cn('flex items-center rounded-xl p-2.5', collapsed ? 'justify-center' : 'gap-2.5')} style={{ background: C.bg }}>
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
             style={{ background: C.primary + '25', color: C.primary }}>
             {initials}
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-foreground truncate leading-tight">{user?.name || 'User'}</p>
-            <p className="text-[10px] text-muted-foreground truncate leading-tight">{user?.email}</p>
-          </div>
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-foreground truncate leading-tight">{user?.name || 'User'}</p>
+              <p className="text-[10px] text-muted-foreground truncate leading-tight">{user?.email}</p>
+            </div>
+          )}
           <button className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-white/5"
             style={{ background: 'none', border: 'none', cursor: 'pointer' }}
             onClick={() => dispatch({ type: 'LOGOUT' })} title="Sign out">
@@ -509,30 +529,54 @@ function Sidebar({ state, dispatch }) {
           </button>
         </div>
       </div>
-    </div>
+    </>
+  );
+}
+
+function Sidebar({ state, dispatch }) {
+  const { navItems, user, initials } = useSidebarData(state);
+
+  return (
+    <>
+      {/* Tablet (md-lg): icon-only collapsed sidebar */}
+      <div className="hidden md:flex lg:hidden flex-col shrink-0 border-r border-border w-[64px] relative" style={{ background: C.surface }}>
+        <SidebarNavContent state={state} dispatch={dispatch} navItems={navItems} user={user} initials={initials} collapsed={true} />
+      </div>
+
+      {/* Desktop (lg+): full sidebar with labels */}
+      <div className="hidden lg:flex flex-col shrink-0 border-r border-border w-[240px]" style={{ background: C.surface }}>
+        <SidebarNavContent state={state} dispatch={dispatch} navItems={navItems} user={user} initials={initials} collapsed={false} />
+      </div>
+
+      {/* Mobile (< md): Sheet drawer */}
+      <Sheet open={state.mobileNavOpen} onOpenChange={(open) => dispatch({ type: open ? 'TOGGLE_MOBILE_NAV' : 'CLOSE_MOBILE_NAV' })}>
+        <SheetContent side="left" style={{ background: C.surface, borderRight: `1px solid ${C.border}`, padding: 0 }}>
+          <SidebarNavContent state={state} dispatch={dispatch} navItems={navItems} user={user} initials={initials} collapsed={false}
+            onNavClick={() => dispatch({ type: 'CLOSE_MOBILE_NAV' })} />
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }
 
 // ─── Top Header ───────────────────────────────────────────────────
-const VIEW_TITLES = {
-  dashboard: 'Dashboard', projects: 'Projects', project_detail: 'Project Detail',
-  clients: 'Clients', kanban: 'Milestone Board', chat: 'AI Chat',
-  onboarding: 'Getting Started', activity: 'Activity Log',
-};
-
-function TopHeader({ state }) {
+function TopHeader({ state, dispatch }) {
   const user = state.user;
   const initials = user?.name
     ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : (user?.email || '?')[0].toUpperCase();
-  const title = VIEW_TITLES[state.view] || 'Dashboard';
 
   return (
-    <div className="h-16 flex items-center gap-4 px-8 lg:px-10 border-b border-border shrink-0"
+    <div className="h-16 flex items-center gap-3 px-4 sm:px-6 md:px-8 lg:px-10 border-b border-border shrink-0"
       style={{ background: C.surface + 'CC', backdropFilter: 'blur(12px)' }}>
-      <div>
-        <h1 className="text-base font-bold tracking-tight text-foreground leading-tight">{title}</h1>
-      </div>
+      {/* Hamburger — mobile only */}
+      <button
+        className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground transition-colors"
+        style={{ background: C.bg, border: `1px solid ${C.border}`, cursor: 'pointer' }}
+        onClick={() => dispatch({ type: 'TOGGLE_MOBILE_NAV' })}
+        aria-label="Open navigation">
+        <Menu size={18} />
+      </button>
       <div className="ml-auto flex items-center gap-3">
         <div className="relative hidden md:block">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
@@ -552,21 +596,38 @@ function TopHeader({ state }) {
   );
 }
 
+// ─── Shared: PageHeader ───────────────────────────────────────────
+function PageHeader({ icon: Icon, title, badge, subtitle, action }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-6">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2.5 mb-2 flex-wrap">
+          {Icon && <Icon size={20} style={{ color: C.primary }} />}
+          <h1 className="text-2xl font-bold text-foreground">{title}</h1>
+          {badge}
+        </div>
+        {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+      </div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
 // ─── Dashboard ────────────────────────────────────────────────────
 function KPICard({ label, value, color, subtitle, icon: Icon }) {
   return (
     <Card className="hover:border-primary/40 transition-all hover:-translate-y-px">
-      <CardContent className="pt-5 pb-5">
+      <CardContent className="px-4 xl:px-6 pt-5 pb-5">
         <div className="flex items-start justify-between mb-4">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">{label}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground leading-tight">{label}</p>
           {Icon && (
-            <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+            <div className="hidden xl:flex w-9 h-9 rounded-xl items-center justify-center shrink-0"
               style={{ background: color + '1A' }}>
               <Icon size={17} style={{ color }} />
             </div>
           )}
         </div>
-        <p className="text-4xl font-extrabold tracking-tight text-foreground leading-none">{value}</p>
+        <p className="text-2xl sm:text-3xl lg:text-2xl xl:text-4xl font-extrabold tracking-tight text-foreground leading-none">{value}</p>
         {subtitle && <p className="text-sm text-muted-foreground mt-2.5">{subtitle}</p>}
       </CardContent>
     </Card>
@@ -654,7 +715,7 @@ function OneClickCards({ dispatch }) {
 
   return (
     <div className="mb-8">
-      <div className="flex items-center gap-3 mb-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
         <Sparkles size={16} style={{ color: C.primary }} />
         <p className="text-xs font-bold uppercase tracking-widest" style={{ color: C.text }}>
           One-Click Outcomes
@@ -685,7 +746,7 @@ function OneClickCards({ dispatch }) {
               <p className="text-sm font-bold text-foreground mb-1">{a.title}</p>
               <p className="text-xs text-muted-foreground leading-relaxed">{a.description}</p>
               {a.needsProject && (
-                <p className="text-[10px] uppercase tracking-wider mt-3 opacity-70" style={{ color: a.color }}>
+                <p className="text-[11px] uppercase tracking-normal mt-3 opacity-70" style={{ color: a.color }}>
                   pick project in chat
                 </p>
               )}
@@ -830,6 +891,11 @@ function DashboardView({ state, dispatch }) {
 
   return (
     <div>
+      <PageHeader
+        icon={LayoutDashboard}
+        title="Dashboard"
+        subtitle="At-a-glance KPIs and quick actions across your business."
+      />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <KPICard label="Pipeline Value" value={fmt(kpis.pipeline_cents)} color={C.accent} subtitle={`${kpis.active_projects || 0} active projects`} icon={TrendingUp} />
         <KPICard label="Total Clients" value={kpis.total_clients ?? 0} color={C.accent} icon={Users} />
@@ -841,7 +907,7 @@ function DashboardView({ state, dispatch }) {
 
       {roiCards && (
         <div className="mb-8">
-          <div className="flex items-center gap-3 mb-3">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3">
             <ShieldCheck size={16} style={{ color: C.primary }} />
             <p className="text-xs font-bold uppercase tracking-widest" style={{ color: C.text }}>
               Agent ROI · last {roi.window_days} days
@@ -854,7 +920,7 @@ function DashboardView({ state, dispatch }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <Card>
           <CardHeader><CardTitle>Active Projects</CardTitle></CardHeader>
           <CardContent>
@@ -1062,16 +1128,16 @@ function ChatMessage({ msg, verbose = true, streaming = false, onOpenDrafts }) {
           const meta = RESOURCE_LABELS[d.resource_type] || { color: C.textDim, label: d.resource_type, endpoint: '' };
           const conf = d.confidence != null ? Math.round(Number(d.confidence) * 100) : null;
           return (
-            <div key={i} className="my-2 rounded-xl p-3.5 flex items-center gap-3"
+            <div key={i} className="my-2 rounded-xl p-3.5 flex flex-wrap items-center gap-3"
               style={{ background: meta.color + '12', border: `1px solid ${meta.color}55` }}>
               <div className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: meta.color + '22' }}>
                 <Inbox size={16} style={{ color: meta.color }} />
               </div>
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0" style={{ minWidth: 120 }}>
                 <p className="text-sm font-semibold text-foreground truncate">
                   {meta.label} saved · {d.title}
                 </p>
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-0.5">
                   {d.amount_cents != null && <span>{fmt(d.amount_cents)}</span>}
                   {d.amount_cents != null && conf != null && <span>·</span>}
                   {conf != null && <span>{conf}% confidence</span>}
@@ -1080,7 +1146,7 @@ function ChatMessage({ msg, verbose = true, streaming = false, onOpenDrafts }) {
                 </div>
               </div>
               {onOpenDrafts && (
-                <Button size="sm" onClick={() => onOpenDrafts(d.resource_id)}>
+                <Button size="sm" className="shrink-0 w-full sm:w-auto" onClick={() => onOpenDrafts(d.resource_id)}>
                   Open in Drafts <ChevronRight size={13} className="ml-1" />
                 </Button>
               )}
@@ -1177,9 +1243,9 @@ function ChatView({ state, dispatch }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px - 80px)' }}>
       {/* Header */}
-      <div className="flex items-center gap-4 mb-4 shrink-0">
+      <div className="flex flex-wrap items-center gap-3 mb-4 shrink-0">
         <select value={state.chatProjectId || ''} onChange={(e) => dispatch({ type: 'SET_CHAT_PROJECT', projectId: e.target.value || null })}
-          className="h-9 rounded-lg border border-border bg-background text-sm text-foreground px-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 w-[220px]">
+          className="h-9 rounded-lg border border-border bg-background text-sm text-foreground px-3 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 w-full sm:w-[220px]">
           <option value="">All projects</option>
           {state.projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
@@ -1344,26 +1410,28 @@ function ProjectsView({ state, dispatch }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-muted-foreground">
-          {state.projectsLoading ? 'Loading...' : `${state.projects.length} total project${state.projects.length !== 1 ? 's' : ''}`}
-        </p>
-        <Button onClick={() => setShowNew(true)}><Plus size={15} />New Project</Button>
-      </div>
+      <PageHeader
+        icon={FolderOpen}
+        title="Projects"
+        badge={!state.projectsLoading && <span style={S.badge(C.text)}>{state.projects.length} total</span>}
+        subtitle="Active and past projects across your clients."
+        action={<Button onClick={() => setShowNew(true)}><Plus size={15} />New Project</Button>}
+      />
 
       {showNew && (
         <Card className="mb-5">
           <CardContent className="pt-6">
             <form onSubmit={handleCreate} className="flex flex-col gap-3">
               <Input placeholder="Project name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              <div className="flex gap-3">
-                <select className="h-10 flex-1 rounded-lg border border-border bg-background text-sm text-foreground px-3 focus:outline-none focus:border-primary"
+              <div className="relative">
+                <select className="h-10 w-full appearance-none rounded-lg border border-border bg-background text-sm text-foreground pl-3 pr-10 focus:outline-none focus:border-primary"
                   value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}>
                   <option value="">No client</option>
                   {state.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
-                <Input type="number" placeholder="Budget ($)" value={form.budget_cents} onChange={(e) => setForm({ ...form, budget_cents: e.target.value })} />
+                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
               </div>
+              <Input type="number" placeholder="Budget ($)" value={form.budget_cents} onChange={(e) => setForm({ ...form, budget_cents: e.target.value })} />
               <Textarea placeholder="Scope summary" value={form.scope_summary} onChange={(e) => setForm({ ...form, scope_summary: e.target.value })} className="min-h-[60px]" />
               <div className="flex gap-2">
                 <Button type="submit">Create</Button>
@@ -1430,7 +1498,7 @@ function DocContent({ content, color }) {
 function ConfirmModal({ message, onConfirm, onCancel }) {
   return (
     <div onClick={onCancel} className="fixed inset-0 bg-black/60 flex items-center justify-center z-[1000]">
-      <Card className="fade-in w-[360px] text-center" onClick={(e) => e.stopPropagation()}>
+      <Card className="fade-in w-[360px] max-w-[90vw] text-center" onClick={(e) => e.stopPropagation()}>
         <CardContent className="pt-6">
           <p className="text-sm font-medium mb-5">{message}</p>
           <div className="flex gap-2.5 justify-center">
@@ -1461,16 +1529,16 @@ function CollapsibleDoc({ doc, color, type, onDelete, children }) {
   return (
     <Card className="mb-3">
       <CardContent className="pt-4 pb-4">
-        <div className="flex justify-between items-center cursor-pointer" onClick={() => setOpen(!open)}>
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground text-xs">{open ? '\u25BC' : '\u25B6'}</span>
-            <span style={S.badge(color)}>{doc.status}</span>
-            <span className="text-sm text-foreground">{title}</span>
+        <div className="flex flex-wrap items-center justify-between gap-y-2 cursor-pointer" onClick={() => setOpen(!open)}>
+          <div className="flex items-center gap-2 min-w-0 mr-2">
+            <span className="text-muted-foreground text-xs shrink-0">{open ? '\u25BC' : '\u25B6'}</span>
+            <span style={S.badge(color)} className="shrink-0">{doc.status}</span>
+            <span className="text-sm text-foreground truncate">{title}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <span className="text-xs text-muted-foreground">{new Date(doc.created_at).toLocaleDateString()}</span>
             <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); downloadJSON(doc, `${type}-${doc.id.slice(0, 8)}.json`); }}>Download</Button>
-            <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={handleDelete}>Delete</Button>
+            <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger }} onClick={handleDelete}>Delete</Button>
           </div>
         </div>
         {open && <div className="mt-3">{children}</div>}
@@ -1494,7 +1562,7 @@ function ScopeEventCard({ ev, onDelete }) {
           <p className="text-sm text-foreground">{ev.description}</p>
           {ev.estimated_cost_cents && <p className="text-sm mt-1" style={{ color: C.warning }}>{fmt(ev.estimated_cost_cents)} estimated</p>}
         </div>
-        <Button variant="outline" size="sm" className="h-6 px-2 text-[11px] shrink-0" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => setShowConfirm(true)}>Delete</Button>
+        <Button variant="outline" size="sm" className="h-6 px-2 text-[11px] shrink-0" style={{ color: C.danger, borderColor: C.danger }} onClick={() => setShowConfirm(true)}>Delete</Button>
         {showConfirm && <ConfirmModal message="Delete this scope event?" onConfirm={handleDelete} onCancel={() => setShowConfirm(false)} />}
       </CardContent>
     </Card>
@@ -1533,7 +1601,7 @@ function ProjectChat({ projectId, state, dispatch }) {
   }, [input, state.chatStreaming, projectId, dispatch]);
 
   return (
-    <Card className="flex flex-col h-[420px] overflow-hidden p-0">
+    <Card className="flex flex-col h-[60vh] md:h-[420px] overflow-hidden p-0">
       <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
         <span className="text-sm font-semibold text-foreground">Project Chat</span>
         {state.activeAgents.map((a) => <span key={a} className="typing-dot w-1.5 h-1.5 rounded-full" style={{ background: AGENT_COLORS[a] || C.textDim }} />)}
@@ -1563,7 +1631,7 @@ function ProjectChat({ projectId, state, dispatch }) {
         )}
         <div ref={endRef} />
       </div>
-      <div className="p-2.5 border-t border-border flex gap-1.5">
+      <div className="p-2.5 border-t border-border flex items-center gap-1.5">
         <Textarea value={input} onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
           onPaste={(e) => {
@@ -1579,7 +1647,7 @@ function ProjectChat({ projectId, state, dispatch }) {
           }}
           placeholder="Ask about this project..." rows={1} className="flex-1 min-h-[36px] text-sm py-2 px-3" />
         {state.chatStreaming
-          ? <Button variant="destructive" size="sm" onClick={() => abortRef.current?.abort()}>Stop</Button>
+          ? <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => abortRef.current?.abort()}>Stop</Button>
           : <Button size="sm" onClick={() => send()} disabled={!input.trim()}>Send</Button>}
       </div>
     </Card>
@@ -1748,16 +1816,16 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
 
   return (
     <div style={{ ...S.card, marginBottom: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+      <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3" style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 16, fontWeight: 600 }}>Milestones</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={onRefresh}>Refresh</Button>
           <Button variant="outline" size="sm" onClick={() => setShowForm(!showForm)}>{showForm ? 'Cancel' : <><Plus size={13} />Add</>}</Button>
           <Button variant="outline" size="sm" onClick={handleShare}>Share with Client</Button>
         </div>
       </div>
 
-      {shareUrl && (
+      {shareUrl && !completedNotice && (
         <div style={{ background: C.bg, borderRadius: 8, padding: 10, marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: C.accent, wordBreak: 'break-all' }}>{shareUrl}</span>
           <Button variant="outline" size="sm" className="shrink-0 ml-2" onClick={() => { navigator.clipboard.writeText(shareUrl); }}>Copy</Button>
@@ -1852,7 +1920,7 @@ function MilestonePanel({ milestones, projectId, onRefresh }) {
                 <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                   {(m.status === 'pending') && <Button variant="outline" size="sm" onClick={() => handleAction(m.id, 'activate')}>Activate</Button>}
                   {(m.status === 'active') && <Button variant="outline" size="sm" style={{ color: C.warning, borderColor: C.warning + '44' }} onClick={() => handleAction(m.id, 'complete')}>Mark Complete</Button>}
-                  {(m.status === 'pending') && <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => handleDelete(m.id)}>Delete</Button>}
+                  {(m.status === 'pending') && <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger }} onClick={() => handleDelete(m.id)}>Delete</Button>}
                 </div>
               )}
             </div>
@@ -1926,16 +1994,16 @@ function ProjectDetail({ state, dispatch }) {
       <Button variant="outline" size="sm" className="mb-4" onClick={() => dispatch({ type: 'SET_VIEW', view: 'projects' })}>&#8592; Back to Projects</Button>
 
       <div style={{ ...S.card, marginBottom: 20 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
             <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: '-0.03em', color: C.text }}>{project.name}</h1>
             <p style={{ color: C.textMuted, fontSize: 13, marginTop: 4 }}><span style={{ fontWeight: 600, color: C.text }}>Client:</span> {project.client_name || 'No client'}</p>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-row sm:flex-col items-center sm:items-end gap-2 flex-wrap shrink-0">
+            <div className="flex items-center gap-2 flex-wrap">
               <span style={S.badge(statusColors[project.status] || C.textDim)}>{project.status}</span>
               <Button variant="outline" size="sm" onClick={openEdit}>Edit</Button>
-              <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger + '44' }} onClick={() => setShowDeleteConfirm(true)}>Delete</Button>
+              <Button variant="outline" size="sm" style={{ color: C.danger, borderColor: C.danger }} onClick={() => setShowDeleteConfirm(true)}>Delete</Button>
             </div>
             {project.budget_cents && <p style={{ fontSize: 22, fontWeight: 700, color: C.proposal }}>{fmt(project.budget_cents)}</p>}
           </div>
@@ -2001,7 +2069,7 @@ function ProjectDetail({ state, dispatch }) {
       )}
 
       {/* Milestones + Payment Summary grid */}
-      <div className="grid gap-5" style={{ gridTemplateColumns: '3fr 1fr', alignItems: 'start' }}>
+      <div className="grid gap-5 grid-cols-1 md:grid-cols-[3fr_1fr]" style={{ alignItems: 'start' }}>
         <MilestonePanel milestones={p.milestones || []} projectId={project.id} onRefresh={refresh} />
 
         {/* Payment Summary */}
@@ -2047,14 +2115,15 @@ function ProjectDetail({ state, dispatch }) {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: `1px solid ${C.border}`, alignItems: 'center' }}>
-        {tabs.map((t) => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ padding: '10px 20px', background: 'transparent', border: 'none', borderBottom: tab === t.id ? `2px solid ${t.color}` : '2px solid transparent', color: tab === t.id ? t.color : C.textMuted, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
-            {t.label} ({t.data.length})
-          </button>
-        ))}
-        <button onClick={refresh} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: C.textDim, fontSize: 12, cursor: 'pointer', padding: '10px' }} title="Refresh">Refresh</button>
+      <div style={{ marginBottom: 16, borderBottom: `1px solid ${C.border}` }} className="overflow-x-auto">
+        <div style={{ display: 'flex', gap: 0, alignItems: 'center', minWidth: 'max-content' }}>
+          {tabs.map((t) => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding: '10px 20px', background: 'transparent', border: 'none', borderBottom: tab === t.id ? `2px solid ${t.color}` : '2px solid transparent', color: tab === t.id ? t.color : C.textMuted, cursor: 'pointer', fontSize: 14, fontWeight: 500 }}>
+              {t.label} ({t.data.length})
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab content */}
@@ -2193,13 +2262,13 @@ function ClientsView({ state, dispatch }) {
 
   return (
     <div>
-      {/* Count + action row */}
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-muted-foreground">
-          {state.clientsLoading ? 'Loading...' : `${state.clients.length} total client${state.clients.length !== 1 ? 's' : ''}`}
-        </p>
-        <Button onClick={() => openForm()}><Plus size={15} />Add Client</Button>
-      </div>
+      <PageHeader
+        icon={Users}
+        title="Clients"
+        badge={!state.clientsLoading && <span style={S.badge(C.text)}>{state.clients.length} total</span>}
+        subtitle="Everyone you've worked with — agents use this list when drafting."
+        action={<Button onClick={() => openForm()}><Plus size={15} />Add Client</Button>}
+      />
 
       {/* Card grid */}
       {state.clients.length === 0 && !state.clientsLoading && (
@@ -2318,10 +2387,36 @@ function KanbanView({ state, dispatch }) {
 
   if (loading) return <p className="text-muted-foreground italic text-center p-10">Loading milestones...</p>;
 
+  const awaitingCount = milestones.filter((m) => m.status === 'completed').length;
+
+  const handleCardClick = (m) => {
+    dispatch({ type: 'SET_VIEW', view: 'project_detail' });
+    dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' });
+    api(`/projects/${m.project_id}`).then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data }));
+  };
+
+  const renderCard = (m) => (
+    <Card key={m.id} className="card-hover cursor-pointer hover:border-primary/40" onClick={() => handleCardClick(m)}>
+      <CardContent className="p-3">
+        <p className="text-sm font-semibold mb-1 text-foreground">{m.title}</p>
+        <p className="text-[11px] text-muted-foreground">{m.project_name}</p>
+        {m.amount_cents > 0 && <p className="text-xs mt-1" style={{ color: C.accent }}>{fmt(m.amount_cents)}</p>}
+        {m.approval_type === 'auto' && <span className="text-[9px] text-muted-foreground rounded-full px-1.5 py-px mt-1 inline-block" style={{ background: C.surface }}>Auto</span>}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div>
-      <p className="text-muted-foreground text-sm mb-6">All milestones across active projects</p>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 1fr)`, gap: 16, minHeight: 400 }}>
+      <PageHeader
+        icon={Kanban}
+        title="Milestone Board"
+        badge={awaitingCount > 0 && <span style={S.badge(C.warning)}>{awaitingCount} awaiting approval</span>}
+        subtitle="All milestones across active projects."
+      />
+
+      {/* Mobile (<md): stacked column wells — one full-width section per status */}
+      <div className="md:hidden grid grid-cols-1 gap-4">
         {columns.map((col) => {
           const items = milestones.filter((m) => m.status === col.status);
           return (
@@ -2331,17 +2426,43 @@ function KanbanView({ state, dispatch }) {
                 <span style={S.badge(col.color)}>{items.length}</span>
               </div>
               {items.length === 0 && <p className="text-muted-foreground text-xs text-center py-5 italic">No milestones</p>}
-              {items.map((m) => (
-                <Card key={m.id} className="card-hover mb-2 cursor-pointer hover:border-primary/40"
-                  onClick={() => { dispatch({ type: 'SET_VIEW', view: 'project_detail' }); dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' }); api(`/projects/${m.project_id}`).then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data })); }}>
-                  <CardContent className="p-3">
-                    <p className="text-sm font-semibold mb-1 text-foreground">{m.title}</p>
-                    <p className="text-[11px] text-muted-foreground">{m.project_name}</p>
-                    {m.amount_cents > 0 && <p className="text-xs mt-1" style={{ color: C.accent }}>{fmt(m.amount_cents)}</p>}
-                    {m.approval_type === 'auto' && <span className="text-[9px] text-muted-foreground rounded-full px-1.5 py-px mt-1 inline-block" style={{ background: C.surface }}>Auto</span>}
-                  </CardContent>
-                </Card>
-              ))}
+              {items.map(renderCard)}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* iPad (md–xl): grouped rows — status as labeled section, cards auto-fill */}
+      <div className="hidden md:block xl:hidden space-y-8">
+        {columns.map((col) => {
+          const items = milestones.filter((m) => m.status === col.status);
+          return (
+            <div key={col.status}>
+              <div className="flex items-center gap-3 mb-4 pb-2" style={{ borderBottom: `2px solid ${col.color}` }}>
+                <span className="text-sm font-semibold" style={{ color: col.color }}>{col.label}</span>
+                <span style={S.badge(col.color)}>{items.length}</span>
+              </div>
+              {items.length === 0
+                ? <p className="text-muted-foreground text-sm italic">No milestones at this stage.</p>
+                : <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>{items.map(renderCard)}</div>
+              }
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop (xl+): original 4-column kanban */}
+      <div className="hidden xl:grid xl:grid-cols-4 gap-4">
+        {columns.map((col) => {
+          const items = milestones.filter((m) => m.status === col.status);
+          return (
+            <div key={col.status} className="rounded-xl p-3 border border-border" style={{ background: C.bg }}>
+              <div className="flex justify-between items-center mb-3 pb-2" style={{ borderBottom: `2px solid ${col.color}` }}>
+                <span className="text-sm font-semibold" style={{ color: col.color }}>{col.label}</span>
+                <span style={S.badge(col.color)}>{items.length}</span>
+              </div>
+              {items.length === 0 && <p className="text-muted-foreground text-xs text-center py-5 italic">No milestones</p>}
+              {items.map(renderCard)}
             </div>
           );
         })}
@@ -2427,13 +2548,13 @@ function ActivityLogEntry({ log, estimateCost }) {
   return (
     <Card className="card-hover mb-2.5 cursor-pointer hover:border-primary/40" onClick={() => setOpen(!open)}>
       <CardContent className="pt-4 pb-4">
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <span className="text-muted-foreground text-xs">{open ? '\u25BC' : '\u25B6'}</span>
           <span style={S.badge(color)}>{AGENT_NAMES[log.agent] || log.agent}</span>
-          {log.project_name && <span className="text-xs text-muted-foreground">{log.project_name}</span>}
-          <span className="ml-auto flex gap-3 text-xs text-muted-foreground">
-            <span>{(log.duration_ms / 1000).toFixed(1)}s</span>
-            <span>{totalTokens.toLocaleString()} tok</span>
+          {log.project_name && <span className="text-xs text-muted-foreground truncate max-w-[120px] sm:max-w-none">{log.project_name}</span>}
+          <span className="ml-auto flex gap-2 flex-wrap text-xs text-muted-foreground">
+            <span className="hidden sm:inline">{(log.duration_ms / 1000).toFixed(1)}s</span>
+            <span className="hidden sm:inline">{totalTokens.toLocaleString()} tok</span>
             <span>${estimateCost(log)}</span>
             <span>{timeAgo(log.created_at)}</span>
           </span>
@@ -2806,19 +2927,13 @@ function DraftsView({ state, dispatch }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <ShieldCheck size={20} style={{ color: C.primary }} />
-            <h1 className="text-2xl font-bold text-foreground">Drafts Inbox</h1>
-            <span style={S.badge(C.warning)}>{drafts.length} pending</span>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Agents drafted these — nothing leaves your inbox until you approve. Review the confidence score, then send.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={refresh} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>
-      </div>
+      <PageHeader
+        icon={ShieldCheck}
+        title="Drafts Inbox"
+        badge={<span style={S.badge(C.warning)}>{drafts.length} pending</span>}
+        subtitle="Agents drafted these — nothing leaves your inbox until you approve. Review the confidence score, then send."
+        action={<Button variant="outline" size="sm" onClick={refresh} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>}
+      />
 
       {error && (
         <Card className="mb-4" style={{ borderColor: C.danger + '66' }}>
@@ -2861,7 +2976,7 @@ function DraftsView({ state, dispatch }) {
             >
               <CardContent className="pt-5 pb-5">
                 <div
-                  className="flex items-start gap-4 cursor-pointer"
+                  className="flex items-start gap-3 cursor-pointer"
                   onClick={() => toggleExpand(d)}
                   title="Click to preview"
                 >
@@ -2871,29 +2986,34 @@ function DraftsView({ state, dispatch }) {
                     style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', color: C.textMuted }}
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2 flex-wrap">
-                      <span style={S.badge(meta.color)}>{meta.label}</span>
-                      <span className="text-sm font-semibold text-foreground truncate">{d.title}</span>
-                      {d.amount_cents != null && (
-                        <span className="text-xs text-muted-foreground">· {fmt(d.amount_cents)}</span>
-                      )}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <span style={S.badge(meta.color)}>{meta.label}</span>
+                        <span className="text-sm font-semibold text-foreground truncate">{d.title}</span>
+                      </div>
+                      <div className="hidden sm:block shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <Button onClick={() => handleSend(d)} disabled={isSending} size="sm">
+                          <Send size={13} className="mr-1.5" />
+                          {isSending ? 'Sending...' : 'Approve & Send'}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                      <span>{d.project_name}</span>
-                      {d.client_name && <><span>·</span><span>{d.client_name}</span></>}
-                      <span>·</span>
-                      <span>{timeAgo(d.created_at)}</span>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      {d.amount_cents != null && <>{fmt(d.amount_cents)}<span className="mx-1.5 opacity-50">·</span></>}
+                      {d.project_name}
+                      {d.client_name && <><span className="mx-1.5 opacity-50">·</span>{d.client_name}</>}
+                      <span className="mx-1.5 opacity-50">·</span>
+                      {timeAgo(d.created_at)}
+                    </p>
+                    <div className="mt-3 flex items-center justify-between flex-wrap gap-2">
+                      <ConfidenceBadge score={d.confidence} />
+                      <div className="sm:hidden" onClick={(e) => e.stopPropagation()}>
+                        <Button onClick={() => handleSend(d)} disabled={isSending} size="sm">
+                          <Send size={13} className="mr-1.5" />
+                          {isSending ? 'Sending...' : 'Approve & Send'}
+                        </Button>
+                      </div>
                     </div>
-                    <div className="mt-3"><ConfidenceBadge score={d.confidence} /></div>
-                  </div>
-                  <div
-                    className="shrink-0 flex flex-col gap-2 items-end"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Button onClick={() => handleSend(d)} disabled={isSending} size="sm">
-                      <Send size={13} className="mr-1.5" />
-                      {isSending ? 'Sending...' : 'Approve & Send'}
-                    </Button>
                   </div>
                 </div>
 
@@ -3155,21 +3275,13 @@ function MemoryView({ state, dispatch }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-3 mb-2">
-            <Brain size={20} style={{ color: C.primary }} />
-            <h1 className="text-2xl font-bold text-foreground">Agent Memory</h1>
-            {pendingCount > 0 && <span style={S.badge(C.warning)}>{pendingCount} pending review</span>}
-          </div>
-          <p className="text-sm text-muted-foreground">
-            What your agents have learned. Pending facts are agent observations awaiting your approval — they don't influence future runs until you confirm them.
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>
-          {loading ? 'Refreshing...' : 'Refresh'}
-        </Button>
-      </div>
+      <PageHeader
+        icon={Brain}
+        title="Agent Memory"
+        badge={pendingCount > 0 && <span style={S.badge(C.warning)}>{pendingCount} pending review</span>}
+        subtitle="What your agents have learned. Pending facts are agent observations awaiting your approval — they don't influence future runs until you confirm them."
+        action={<Button variant="outline" size="sm" onClick={loadAll} disabled={loading}>{loading ? 'Refreshing...' : 'Refresh'}</Button>}
+      />
 
       {error && (
         <Card className="mb-4" style={{ borderColor: C.danger + '66' }}>
@@ -3311,8 +3423,8 @@ export default function App() {
       <div className="flex min-h-screen" style={{ background: C.bg, color: C.text }}>
         <Sidebar state={state} dispatch={dispatch} />
         <div className="flex-1 flex flex-col min-h-screen overflow-hidden">
-          <TopHeader state={state} />
-          <main className="flex-1 overflow-y-auto p-8 lg:p-10">
+          <TopHeader state={state} dispatch={dispatch} />
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 lg:p-10">
             <View state={state} dispatch={dispatch} />
           </main>
         </div>
