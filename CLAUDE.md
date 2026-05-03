@@ -17,6 +17,19 @@ AI-powered back-office platform for freelancers and agencies. Five specialized a
 - Use `/effort max` for planning, architecture decisions, complex debugging, and code review -- anywhere reasoning quality matters more than speed.
 - Do not use max for routine edits, simple bug fixes, or straightforward CRUD work.
 
+## Workflow
+
+For non-trivial features (anything touching >1 file or >1 area):
+
+1. **Plan mode first.** Enter plan mode (Shift+Tab) before writing code. Force codebase exploration via Explore subagent before proposing structure.
+2. **End every plan with unresolved questions.** A short, numbered list. If there are none, say so explicitly. No questions = high risk of wrong assumptions.
+3. **Multi-phase if work spans >1 phase.** If the plan has more than one phase, it MUST be a multi-phase plan with discrete checkpoints. Each phase ends with a review pause.
+4. **Persist multi-phase plans as GitHub issues.** Before starting phase 1, run `gh issue create` with the full plan in the body. Update the issue (check off items) after each phase. This survives context resets — when context fills, clear it and resume with `gh issue view <n>`.
+5. **Stage between phases.** After each phase, `git add` the phase's changes (don't commit yet) so the next phase's diff is clean. Commit at natural breakpoints, not every phase.
+6. **Branch prefix `bt/`.** AI-authored branches use `bt/<short-description>` (e.g., `bt/diff-cli`, `bt/fix-pipeline-bigint`).
+7. **External edits → tell Claude.** If the user edits files outside Claude (formatter, manual change), tell Claude `pull <file> into your context` before continuing.
+8. **Plan output is telegraphic.** Plan bodies use sentence fragments, drop articles ("the", "a"), and skip hedge words. Example: `add diff CLI; flexible match; overwrite ok` not `This adds a diff CLI command that supports flexible matching and will overwrite existing files`. The "Why" lines and unresolved questions stay in normal prose. Applies to plans only — chat replies, commits, and code comments unchanged.
+
 ## Code Rules
 
 - Semicolons always. Single quotes. `const` only — no `let` unless mutation required.

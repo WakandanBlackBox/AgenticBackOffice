@@ -1,0 +1,1667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CTO Infra & AI Quiz · BackOffice Agent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-base: #060A14;
+    --bg-surface: #0B1120;
+    --bg-elevated: #111A2E;
+    --border: #1E293B;
+    --border-soft: #1E293B66;
+    --blue-primary: #2563EB;
+    --blue-secondary: #1D4ED8;
+    --blue-light: #3B82F6;
+    --blue-glow: rgba(37, 99, 235, 0.22);
+    --text-heading: #E2E8F0;
+    --text-body: #94A3B8;
+    --text-muted: #475569;
+    --green: #10B981;
+    --red: #EF4444;
+    --amber: #F59E0B;
+    --purple: #A855F7;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: var(--bg-base);
+    color: var(--text-body);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(37,99,235,0.18) 0%, rgba(11,17,32,0.6) 50%, #060A14 100%),
+      var(--bg-base);
+    background-attachment: fixed;
+  }
+
+  code, .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 3rem 0 2rem;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 1rem;
+    background: rgba(37, 99, 235, 0.12);
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    border-radius: 999px;
+    color: var(--blue-light);
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+  }
+
+  .pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--blue-light);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--blue-light);
+  }
+
+  h1 {
+    font-size: clamp(2rem, 4vw, 3rem);
+    font-weight: 800;
+    color: var(--text-heading);
+    letter-spacing: -0.02em;
+    margin-bottom: 1rem;
+    line-height: 1.1;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, var(--blue-light) 0%, var(--blue-primary) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .subtitle {
+    color: var(--text-body);
+    max-width: 640px;
+    margin: 0 auto;
+    font-size: 1.05rem;
+  }
+
+  /* Stats bar */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin: 2rem 0 2.5rem;
+  }
+
+  .stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.25rem 1rem;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: var(--text-heading);
+    letter-spacing: -0.02em;
+  }
+
+  .stat-value.blue { color: var(--blue-light); }
+  .stat-value.green { color: var(--green); }
+  .stat-value.red { color: var(--red); }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.25rem;
+  }
+
+  /* Category filter */
+  .categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    justify-content: center;
+  }
+
+  .cat-chip {
+    padding: 0.5rem 1rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--text-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .cat-chip:hover {
+    border-color: var(--blue-primary);
+    color: var(--text-heading);
+  }
+
+  .cat-chip.active {
+    background: var(--blue-primary);
+    border-color: var(--blue-primary);
+    color: white;
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.4);
+  }
+
+  /* Progress bar */
+  .progress-wrap {
+    margin-bottom: 1.5rem;
+  }
+
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+
+  .progress-bar {
+    height: 6px;
+    background: var(--bg-surface);
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue-primary), var(--blue-light));
+    width: 0%;
+    transition: width 0.4s ease;
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.5);
+  }
+
+  /* Question card */
+  .question-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2rem;
+    box-shadow: 0 25px 60px -25px rgba(0, 0, 0, 0.6);
+    margin-bottom: 1.5rem;
+  }
+
+  .question-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+  }
+
+  .q-tag {
+    display: inline-block;
+    padding: 0.25rem 0.7rem;
+    background: rgba(37, 99, 235, 0.12);
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    border-radius: 6px;
+    color: var(--blue-light);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .q-num {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+  }
+
+  .question-text {
+    font-size: 1.25rem;
+    color: var(--text-heading);
+    font-weight: 600;
+    line-height: 1.5;
+    letter-spacing: -0.01em;
+    margin-bottom: 1.5rem;
+  }
+
+  .question-text code {
+    background: var(--bg-elevated);
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    color: var(--blue-light);
+    border: 1px solid var(--border);
+  }
+
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .option {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    color: var(--text-body);
+    font-size: 0.95rem;
+    text-align: left;
+    width: 100%;
+    font-family: inherit;
+  }
+
+  .option:hover:not(:disabled) {
+    border-color: var(--blue-primary);
+    background: rgba(37, 99, 235, 0.05);
+    transform: translateY(-1px);
+  }
+
+  .option:disabled {
+    cursor: default;
+  }
+
+  .option-letter {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--text-body);
+    flex-shrink: 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .option.correct {
+    border-color: var(--green);
+    background: rgba(16, 185, 129, 0.08);
+    color: var(--text-heading);
+  }
+
+  .option.correct .option-letter {
+    background: var(--green);
+    border-color: var(--green);
+    color: white;
+  }
+
+  .option.incorrect {
+    border-color: var(--red);
+    background: rgba(239, 68, 68, 0.08);
+    color: var(--text-heading);
+  }
+
+  .option.incorrect .option-letter {
+    background: var(--red);
+    border-color: var(--red);
+    color: white;
+  }
+
+  .option.dim {
+    opacity: 0.5;
+  }
+
+  .option code {
+    background: rgba(37, 99, 235, 0.1);
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: var(--blue-light);
+  }
+
+  /* Explanation */
+  .explanation {
+    margin-top: 1.5rem;
+    padding: 1.25rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    border-left: 3px solid var(--blue-light);
+    display: none;
+  }
+
+  .explanation.show {
+    display: block;
+    animation: slideIn 0.3s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .explanation-label {
+    font-size: 0.75rem;
+    color: var(--blue-light);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+
+  .explanation-body {
+    color: var(--text-heading);
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+
+  .explanation-body code {
+    background: var(--bg-surface);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.88em;
+    color: var(--blue-light);
+    border: 1px solid var(--border);
+  }
+
+  .explanation-body strong {
+    color: var(--text-heading);
+  }
+
+  .file-cite {
+    margin-top: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .file-cite::before { content: '📂 '; }
+
+  /* Controls */
+  .controls {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .btn {
+    padding: 0.75rem 1.75rem;
+    border-radius: 10px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn-primary {
+    background: var(--blue-primary);
+    color: white;
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.35);
+  }
+
+  .btn-primary:hover {
+    background: var(--blue-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 0 25px rgba(37, 99, 235, 0.5);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-body);
+    border-color: var(--border);
+  }
+
+  .btn-secondary:hover {
+    border-color: var(--blue-primary);
+    color: var(--text-heading);
+  }
+
+  /* Results screen */
+  .results {
+    display: none;
+    text-align: center;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    box-shadow: 0 25px 60px -25px rgba(0, 0, 0, 0.6);
+  }
+
+  .results.show { display: block; }
+
+  .score-ring {
+    width: 180px;
+    height: 180px;
+    margin: 0 auto 1.5rem;
+    position: relative;
+  }
+
+  .score-ring svg {
+    transform: rotate(-90deg);
+  }
+
+  .score-ring circle {
+    fill: none;
+    stroke-width: 12;
+    stroke-linecap: round;
+  }
+
+  .score-bg { stroke: var(--border); }
+  .score-fg {
+    stroke: url(#scoreGrad);
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  .score-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+  }
+
+  .score-pct {
+    font-size: 2.75rem;
+    font-weight: 800;
+    color: var(--text-heading);
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .score-detail {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+  }
+
+  .results h2 {
+    font-size: 1.75rem;
+    color: var(--text-heading);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.5rem;
+  }
+
+  .results-summary {
+    color: var(--text-body);
+    margin-bottom: 2rem;
+    max-width: 480px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .breakdown {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 2rem;
+    text-align: left;
+  }
+
+  .breakdown-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .breakdown-name {
+    font-size: 0.85rem;
+    color: var(--text-body);
+  }
+
+  .breakdown-score {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--text-heading);
+  }
+
+  /* Restart link */
+  .restart-link {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-body);
+    padding: 0.25rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+  }
+  .restart-link:hover {
+    border-color: var(--blue-primary);
+    color: var(--blue-light);
+    background: rgba(37, 99, 235, 0.08);
+  }
+
+  /* Footer */
+  .footer {
+    text-align: center;
+    margin-top: 3rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 640px) {
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .question-card { padding: 1.5rem; }
+    .question-text { font-size: 1.1rem; }
+    .controls { flex-direction: column-reverse; }
+    .btn { width: 100%; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="header">
+    <span class="pill">CTO Self-Quiz · Infra & AI</span>
+    <h1>Know the <span class="text-gradient">backend</span> cold.</h1>
+    <p class="subtitle">A judge-prep quiz on BackOffice Agent's infrastructure, AI architecture, and trust layer. Each question cites the file and explains why the answer is right.</p>
+  </header>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-value blue" id="statTotal">0</div>
+      <div class="stat-label">Questions</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value green" id="statCorrect">0</div>
+      <div class="stat-label">Correct</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value red" id="statWrong">0</div>
+      <div class="stat-label">Missed</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="statPct">—</div>
+      <div class="stat-label">Score</div>
+    </div>
+  </div>
+
+  <div class="categories" id="categories"></div>
+
+  <div class="progress-wrap">
+    <div class="progress-meta">
+      <span id="progressLabel">Question 1 of —</span>
+      <span style="display:flex; gap:0.75rem; align-items:center;">
+        <span id="progressCat"></span>
+        <button class="restart-link" onclick="restartQuiz()" title="Restart this quiz from question 1">↻ Restart</button>
+      </span>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  </div>
+
+  <div id="quiz"></div>
+
+  <div class="results" id="results">
+    <div class="score-ring">
+      <svg width="180" height="180" viewBox="0 0 180 180">
+        <defs>
+          <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3B82F6" />
+            <stop offset="100%" stop-color="#2563EB" />
+          </linearGradient>
+        </defs>
+        <circle class="score-bg" cx="90" cy="90" r="78" />
+        <circle class="score-fg" cx="90" cy="90" r="78"
+          stroke-dasharray="490" stroke-dashoffset="490" id="scoreFg" />
+      </svg>
+      <div class="score-text">
+        <div class="score-pct" id="finalPct">0%</div>
+        <div class="score-detail" id="finalDetail">0 / 0</div>
+      </div>
+    </div>
+    <h2 id="resultsTitle">Quiz complete</h2>
+    <p class="results-summary" id="resultsSummary"></p>
+    <div class="breakdown" id="breakdown"></div>
+    <div class="controls" style="justify-content:center; flex-wrap:wrap;">
+      <button class="btn btn-secondary" onclick="shuffleAndRestart()">🔀 Shuffle & retake</button>
+      <button class="btn btn-secondary" onclick="restartQuiz()">↻ Retake same order</button>
+      <button class="btn btn-primary" onclick="reviewMissed()" id="reviewBtn">Review missed questions</button>
+    </div>
+    <p style="margin-top:1.5rem; font-size:0.82rem; color:var(--text-muted)">Take this as many times as you want — no limits.</p>
+  </div>
+
+  <footer class="footer">
+    BackOffice Agent · CTO study tool · Self-paced, all answers cite source files
+  </footer>
+</div>
+
+<script>
+const QUESTIONS = [
+  // ─────────────────────────── STACK & RUNTIME ───────────────────────────
+  {
+    cat: 'Stack & Runtime',
+    q: 'What Express version powers the API server?',
+    options: ['Express 4.18', 'Express 5.1', 'Fastify 4', 'Hono'],
+    correct: 1,
+    explain: 'We run <strong>Express 5.1.0</strong> (declared in <code>package.json</code>). Express 5 is async-aware, so route handlers can throw and the global error handler catches it without manual try/catch.',
+    cite: 'package.json — "express": "^5.1.0"'
+  },
+  {
+    cat: 'Stack & Runtime',
+    q: 'What is the JSON body limit on the Express app?',
+    options: ['100kb (default)', '512kb', '1mb', '5mb'],
+    correct: 2,
+    explain: '<code>express.json({ limit: \'1mb\' })</code> caps payload size at 1MB. Large enough for proposal/contract JSON but small enough to reject pathological payloads at the edge before they hit Zod or the DB.',
+    cite: 'server/index.js:24'
+  },
+  {
+    cat: 'Stack & Runtime',
+    q: 'How is the Postgres pool configured?',
+    options: [
+      'max: 10, idle 10s, no SSL',
+      'max: 20, idle 30s, SSL { rejectUnauthorized: false } in prod',
+      'max: 50, idle 60s, SSL strict',
+      'No pool — fresh client per request'
+    ],
+    correct: 1,
+    explain: '<strong>max 20 connections, 30s idle timeout</strong>. SSL is enabled in prod but with <code>rejectUnauthorized: false</code> — flagged tech debt because Railway\'s cert chain hasn\'t been wired through. Should be <code>true</code> for production-grade.',
+    cite: 'server/db.js:5-7'
+  },
+  {
+    cat: 'Stack & Runtime',
+    q: 'What command does Railway run before deploy?',
+    options: [
+      'npm test',
+      'npm run db:seed',
+      'node server/migrate.js',
+      'npx prisma migrate deploy'
+    ],
+    correct: 2,
+    explain: 'Railway runs <code>node server/migrate.js</code> as the pre-deploy hook. The migrate script is idempotent — every <code>ALTER TABLE</code> uses <code>ADD COLUMN IF NOT EXISTS</code>, so re-running the same schema.sql is safe across deploys.',
+    cite: 'railway.json:5'
+  },
+  {
+    cat: 'Stack & Runtime',
+    q: 'What\'s the health check endpoint Railway hits?',
+    options: ['/healthz', '/api/health', '/status', '/ping'],
+    correct: 1,
+    explain: '<code>GET /api/health</code> returns <code>{ status: "ok", timestamp }</code>. Railway uses this for restart-on-failure (max 3 retries) — if it doesn\'t respond, the deploy is marked unhealthy.',
+    cite: 'server/index.js:32, railway.json:7'
+  },
+  {
+    cat: 'Stack & Runtime',
+    q: 'How does the production server serve the React frontend?',
+    options: [
+      'Separate Nginx container reverse-proxies Express',
+      'Express serves the built React from dist/ with SPA fallback',
+      'CDN serves static assets, Express only handles /api',
+      'Vercel hosts frontend, Railway hosts backend'
+    ],
+    correct: 1,
+    explain: '<strong>Combined service</strong>: Express serves <code>dist/</code> as static files and falls back to <code>index.html</code> for any unmatched route (SPA routing). One Railway service, one URL, no CORS in production.',
+    cite: 'server/index.js:47-50'
+  },
+
+  // ─────────────────────────── DATABASE SCHEMA ───────────────────────────
+  {
+    cat: 'Database',
+    q: 'Why is JSONB used for proposals.content, invoices.line_items, and contracts.content?',
+    options: [
+      'To avoid migrations as document shapes evolve',
+      'JSONB is faster than relational tables',
+      'It\'s required by the Anthropic SDK',
+      'Postgres can\'t store nested data otherwise'
+    ],
+    correct: 0,
+    explain: '<strong>Schema flexibility</strong>: agents draft documents whose shape evolves (new fields, nested structures, optional sections). JSONB lets us version document content without ALTERing tables every iteration. Indexed top-level fields stay relational (status, total_cents).',
+    cite: 'server/schema.sql:37-65'
+  },
+  {
+    cat: 'Database',
+    q: 'What is the proposal status state machine?',
+    options: [
+      'draft → sent → accepted',
+      'draft → pending_approval → sent → accepted/rejected',
+      'pending → sent → paid',
+      'open → closed'
+    ],
+    correct: 1,
+    explain: 'Agents write <code>pending_approval</code>, never <code>sent</code>. The owner reviews in the Drafts inbox, then <code>POST /api/drafts/:resource/send</code> atomically moves it to <code>sent</code> and writes an audit_log row. This is the core HITL trust pattern judges asked about.',
+    cite: 'server/schema.sql:153, server/routes/drafts.js:54-115'
+  },
+  {
+    cat: 'Database',
+    q: 'How do migrations stay idempotent?',
+    options: [
+      'A versioned migrations table tracks what\'s been run',
+      'Every ALTER uses ADD COLUMN IF NOT EXISTS / DROP CONSTRAINT IF EXISTS',
+      'The migrate script diffs against a snapshot',
+      'Sequelize handles it'
+    ],
+    correct: 1,
+    explain: 'No ORM, no migrations table. <code>schema.sql</code> uses <code>CREATE TABLE IF NOT EXISTS</code> and <code>ALTER TABLE ... ADD COLUMN IF NOT EXISTS</code> exclusively. Re-running on every deploy is safe — Postgres no-ops anything already applied.',
+    cite: 'server/schema.sql:145-177'
+  },
+  {
+    cat: 'Database',
+    q: 'What table powers the public client portal?',
+    options: ['portal_sessions', 'share_tokens', 'client_links', 'public_access'],
+    correct: 1,
+    explain: '<code>share_tokens</code> stores a unique random token per project. The portal route resolves <code>/portal/:token</code> against this table — no JWT, no auth header. <code>expires_at</code> can be set so links can be revoked after a soak window. Judges flagged this as a security area to harden.',
+    cite: 'server/schema.sql:124-132, server/routes/client-portal.js:10-24'
+  },
+  {
+    cat: 'Database',
+    q: 'What are the four valid actor_type values in audit_log?',
+    options: [
+      'admin, user, guest, system',
+      'human, ai, system, external',
+      'owner, agent, client_portal, approver',
+      'create, update, delete, read'
+    ],
+    correct: 2,
+    explain: '<code>owner</code> (CTO clicked send), <code>agent</code> (Claude drafted), <code>client_portal</code> (client approved milestone), <code>approver</code> (multi-stakeholder approval, future). This taxonomy is the answer to "who did this?" — directly addresses the judge concern about provenance.',
+    cite: 'server/schema.sql:187'
+  },
+  {
+    cat: 'Database',
+    q: 'What\'s the dedup key on client_memory rows?',
+    options: [
+      'Just the id (UUID)',
+      '(user_id, client_id)',
+      '(user_id, client_id, category, key)',
+      '(client_id, value)'
+    ],
+    correct: 2,
+    explain: 'UNIQUE on <code>(user_id, client_id, category, key)</code>. So the agent can write "client.acme prefers Net-15" repeatedly without creating duplicates — the upsert collapses on conflict. Without this, every run would balloon the memory table.',
+    cite: 'server/schema.sql:219'
+  },
+
+  // ─────────────────────────── AUTH & SECURITY ───────────────────────────
+  {
+    cat: 'Auth & Security',
+    q: 'What bcrypt cost factor do we use for password hashing?',
+    options: ['8', '10', '12', '14'],
+    correct: 2,
+    explain: '<code>bcrypt.hash(password, 12)</code> — cost 12 means 2^12 = 4096 rounds, ~250ms per hash on modern hardware. High enough to deter brute-force, low enough that login isn\'t sluggish. 10 is too soft, 14 is too slow.',
+    cite: 'server/routes/auth.js:16'
+  },
+  {
+    cat: 'Auth & Security',
+    q: 'How long are JWTs valid?',
+    options: ['1 hour', '24 hours', '7 days', '30 days'],
+    correct: 2,
+    explain: '<code>expiresIn: \'7d\'</code> with no refresh mechanism — silent logout after a week. Tech debt: should add refresh tokens, but for hackathon scope a 7-day window is the right tradeoff.',
+    cite: 'server/routes/auth.js:25'
+  },
+  {
+    cat: 'Auth & Security',
+    q: 'What are the three rate-limit tiers?',
+    options: [
+      '10/min everywhere',
+      'auth 5/min, agents 10/min (prod) or 50/min (dev), general 30/min',
+      'auth 20/min, agents 100/min, general 200/min',
+      'No rate limits — relies on Cloudflare'
+    ],
+    correct: 1,
+    explain: 'Three tiers via <code>express-rate-limit</code>: <strong>auth 5/min</strong> (brute-force defense), <strong>agents 10/min in prod, 50/min in dev</strong> (cost & abuse), <strong>general 30/min</strong> (everything else). The dev bypass keeps demos snappy without lifting prod ceilings.',
+    cite: 'server/index.js:27-44'
+  },
+  {
+    cat: 'Auth & Security',
+    q: 'What\'s the validation pattern at API boundaries?',
+    options: [
+      'Manual if-checks in each route',
+      'Joi schemas on req.body',
+      'Zod schemas via a middleware factory; failures return 400 with details',
+      'No validation — trust the frontend'
+    ],
+    correct: 2,
+    explain: 'Every mutation route is wrapped with <code>validate(zodSchema)</code>. Failed parses return <code>{ error: "Validation failed", details: [...] }</code> at 400. Validated data attaches to <code>req.validated</code> so handlers never read raw <code>req.body</code>.',
+    cite: 'server/middleware/validate.js, server/schemas/index.js'
+  },
+  {
+    cat: 'Auth & Security',
+    q: 'Why does chatSchema use .nullish() on project_id instead of .optional()?',
+    options: [
+      '.nullish() is faster',
+      '.optional() accepts only undefined; the frontend sends null for "All Projects", which would 400',
+      'TypeScript inference is better',
+      'There\'s no real difference'
+    ],
+    correct: 1,
+    explain: '<code>.optional()</code> rejects <code>null</code>. The chat UI sends <code>project_id: null</code> when "All Projects" is selected, which silently 400\'d before the fix. <code>.nullish()</code> = optional() + nullable(). Documented in CLAUDE.md as a Zod gotcha.',
+    cite: 'server/schemas/index.js:75 (commit on feat/agent-specialization)'
+  },
+  {
+    cat: 'Auth & Security',
+    q: 'How does the public client portal authenticate clients?',
+    options: [
+      'Magic-link email verification',
+      'A share token in the URL resolved against the share_tokens table',
+      'Anonymous JWT issued at portal load',
+      'OAuth via Google'
+    ],
+    correct: 1,
+    explain: '<strong>Token-in-URL pattern</strong>. <code>/portal/:token</code> looks up <code>share_tokens</code>, checks <code>expires_at</code>, returns project + milestones. No auth header. Judges flagged this — Phase 1 fix is to scope tokens (per-resource, single-use approve actions) and add CSRF on POST.',
+    cite: 'server/routes/client-portal.js:10-24'
+  },
+  {
+    cat: 'Auth & Security',
+    q: 'Which tech-debt security issue is currently flagged in CLAUDE.md?',
+    options: [
+      'JWT stored in localStorage (XSS risk) — should be HttpOnly cookie',
+      'Passwords stored in plaintext',
+      'No CORS configured',
+      'API keys in client bundle'
+    ],
+    correct: 0,
+    explain: 'Frontend stores the JWT in <code>localStorage</code>, which any XSS payload can read. The fix is HttpOnly + Secure + SameSite=Strict cookies, but that requires CSRF tokens on mutations. Tracked as tech debt; not exploited in the demo.',
+    cite: 'CLAUDE.md — Known Issues / Tech Debt'
+  },
+
+  // ─────────────────────────── AGENT ARCHITECTURE ───────────────────────────
+  {
+    cat: 'AI Agents',
+    q: 'How many agents does the system have?',
+    options: [
+      '3 (proposal, invoice, contract)',
+      '5 specialists + 1 Chief orchestrator',
+      '7 (one per business function)',
+      '1 generalist agent with many tools'
+    ],
+    correct: 1,
+    explain: '<strong>5 specialists + Chief</strong>: Proposal, Invoice, Contract, Scope Guardian, Insight — each with its own system prompt, tools, and maxTokens cap. Chief never does work itself; it only delegates via the <code>delegate_to_agent</code> meta-tool.',
+    cite: 'server/agents/agent-config.js:21-250'
+  },
+  {
+    cat: 'AI Agents',
+    q: 'What model do all agents currently use?',
+    options: [
+      'claude-sonnet-4-5 for all',
+      'Mixed — Sonnet for complex agents, Haiku for simple',
+      'claude-haiku-4-5-20251001 for all (Sonnet disabled during hackathon)',
+      'claude-opus-4 for chief, Sonnet for others'
+    ],
+    correct: 2,
+    explain: 'Both <code>MODELS.FAST</code> and <code>MODELS.SMART</code> point to <code>claude-haiku-4-5-20251001</code>. The Sonnet line is commented out. CLAUDE.md flags this honestly — comments imply tiered routing but it isn\'t live. Cost-optimized for hackathon.',
+    cite: 'server/agents/agent-config.js:4-8'
+  },
+  {
+    cat: 'AI Agents',
+    q: 'How does the dispatcher route a query to an agent?',
+    options: [
+      'It always routes to Chief, who decides',
+      'Embedding similarity against agent descriptions',
+      'Keyword scoring against each agent\'s intentPatterns; multi-domain matches go to Chief',
+      'Round-robin load balancing'
+    ],
+    correct: 2,
+    explain: 'Each specialist declares an <code>intentPatterns</code> array (e.g., proposal: [\'proposal\', \'quote\', \'pitch\', \'bid\']). The dispatcher counts case-insensitive keyword hits per agent. <strong>Single hit → direct route</strong> (fast path). <strong>2+ agents match → Chief</strong> (multi-domain). <strong>Zero hits → Chief</strong> (catch-all).',
+    cite: 'server/agents/dispatcher.js:28-47'
+  },
+  {
+    cat: 'AI Agents',
+    q: 'What is the maxTokens cap for the Contract agent and why?',
+    options: [
+      '512 — contracts are short',
+      '1024 — same as everything',
+      '4096 — full clause content + flag array can be lengthy',
+      '8192 — needs maximum room'
+    ],
+    correct: 2,
+    explain: '<strong>Contract: 4096</strong>. Contracts have ~7 required protective clauses plus a JSONB flag array with severity + explanation per landmine. Compare: Insight is 512 (concise KPI), Invoice is 1024 (deterministic line items), Proposal is 2048 (tiered pricing).',
+    cite: 'server/agents/agent-config.js:12-19'
+  },
+  {
+    cat: 'AI Agents',
+    q: 'What\'s the max delegation depth for Chief?',
+    options: ['Unlimited', '1', '2', '5'],
+    correct: 2,
+    explain: '<strong>Max depth 2</strong>. Chief (depth 0) → specialist (depth 1) → no further delegation. Prevents infinite loops if a specialist were to delegate back to Chief. Enforced via <code>{ depth: depth + 1 }</code> threading through <code>runAgent</code>.',
+    cite: 'server/agents/dispatcher.js:50, server/agents/delegate.js:34-84'
+  },
+  {
+    cat: 'AI Agents',
+    q: 'Why is the Chief\'s only tool delegate_to_agent?',
+    options: [
+      'Limitation of the Anthropic API',
+      'Architectural choice — Chief orchestrates, never operates DB directly. Specialists own their domains.',
+      'Bug — more tools were planned',
+      'Chief actually has all tools'
+    ],
+    correct: 1,
+    explain: '<strong>Zero tool overlap by design</strong>. Each specialist owns its domain tools. Chief\'s only capability is <code>delegate_to_agent({ agent_id, message, project_id })</code>. This makes auditing trivial: any DB write by Chief means it delegated, and the audit log records which sub-agent did the work.',
+    cite: 'server/agents/agent-config.js:249, server/agents/delegate.js'
+  },
+  {
+    cat: 'AI Agents',
+    q: 'When the Scope Guardian classifier is invoked on every chat, what short-circuits prevent waste?',
+    options: [
+      'It runs on every message regardless',
+      'Skip if message < 20 chars OR contains no scope keywords; otherwise call Haiku with a 50-token cap',
+      'It only runs on weekends',
+      'It samples 10% of messages'
+    ],
+    correct: 1,
+    explain: 'Two cheap filters before any model call. <strong>Length filter</strong> (<20 chars = "ok", "thanks", noise). <strong>Keyword filter</strong> (must contain at least one of: also, add, extra, change, tweak, quick, small, etc.). Only if both pass does it call the classifier with a tiny 50-token cap. Saves thousands of API calls per session.',
+    cite: 'server/routes/agents.js:14-39'
+  },
+
+  // ─────────────────────────── PROMPT CACHING ───────────────────────────
+  {
+    cat: 'Prompt Caching',
+    q: 'What cache_control type is used on system prompts?',
+    options: ['persistent', 'ephemeral (5-min TTL)', 'semantic', 'No caching'],
+    correct: 1,
+    explain: '<code>cache_control: { type: \'ephemeral\' }</code> — Anthropic\'s ~5-minute TTL cache. First call writes the cache (slightly more expensive), subsequent calls within 5 minutes read it for ~90% off. Perfect for chat sessions where multiple turns hit the same system prompt.',
+    cite: 'server/agents/dispatcher.js:85-87'
+  },
+  {
+    cat: 'Prompt Caching',
+    q: 'Where exactly is the cache_control marker placed?',
+    options: [
+      'On every message in the conversation',
+      'On the system message AND on the LAST tool definition only',
+      'Only on the first tool',
+      'Only on the system message'
+    ],
+    correct: 1,
+    explain: 'Two markers: (1) the system message (text block with <code>cache_control: ephemeral</code>), and (2) <strong>only the last tool definition</strong> in the tools array. Anthropic caches everything up to and including the marker, so marking the last tool caches the entire tool schema bundle.',
+    cite: 'server/agents/dispatcher.js:90-92'
+  },
+  {
+    cat: 'Prompt Caching',
+    q: 'What does cache_read pricing look like for Haiku 4.5 vs regular input?',
+    options: [
+      '$0.80/M input → $0.08/M cache read (10× discount)',
+      'Same price either way',
+      '$0.80/M input → $0.40/M cache read (2× discount)',
+      'Cache reads are free'
+    ],
+    correct: 0,
+    explain: 'Haiku 4.5 input is <strong>$0.80/M</strong>, cache reads are <strong>$0.08/M</strong> — a <strong>10× discount</strong> on cached tokens. Cache writes cost slightly more than regular input ($1.00/M). The math works after just one cached read, which is why we mark system + tools.',
+    cite: 'server/agents/dispatcher.js:16-24 (MODEL_PRICING)'
+  },
+
+  // ─────────────────────────── TOOLS ───────────────────────────
+  {
+    cat: 'Tools',
+    q: 'What is the tool result size cap and why does it exist?',
+    options: [
+      '500 chars — Anthropic limit',
+      '2000 chars — prevents context bloat from large DB payloads',
+      '10,000 chars — generous',
+      'No cap'
+    ],
+    correct: 1,
+    explain: '<code>capResultSize()</code> truncates every tool result to <strong>2000 chars</strong> before returning to the model. A single overgrown query result could otherwise blow past the token budget in one tool call. Pair this with <code>SELECT</code> only-needed columns and <code>LIMIT</code> clauses for layered defense.',
+    cite: 'server/agents/tools.js:6-11'
+  },
+  {
+    cat: 'Tools',
+    q: 'What\'s the standard return shape for tools?',
+    options: [
+      'The raw row directly',
+      '{ success: true, data } or { success: false, error }',
+      'Throws on error, returns row on success',
+      'A status code + message'
+    ],
+    correct: 1,
+    explain: '<strong>Discriminated union</strong>. Success: <code>{ success: true, data: {...} }</code>. Failure: <code>{ success: false, error: "..." }</code>. Tools never throw — exceptions are caught in <code>executeTool</code> and shaped into the error variant. Lets the agent reason about failures (retry, change strategy, ask user).',
+    cite: 'server/agents/tools.js:575-583'
+  },
+  {
+    cat: 'Tools',
+    q: 'How many past proposals does get_past_proposals return, and what fields?',
+    options: [
+      'All of them, full content',
+      'Up to 5, full proposal.content JSONB',
+      'Capped at 3, only id/title/pricing/timeline (no full content)',
+      'Last 10, summarized by Claude'
+    ],
+    correct: 2,
+    explain: 'Limit is capped at 3 (<code>Math.min(limit, 3)</code>). Selects only id, status, created_at, plus title and pricing_total_cents <em>extracted from JSONB</em>. <strong>Never returns full proposal.content</strong> — past proposals are reference signal, not source material. Massive token savings.',
+    cite: 'server/agents/tools.js:62-80'
+  },
+  {
+    cat: 'Tools',
+    q: 'How is read_client_memory bounded for tokens?',
+    options: [
+      'No limits',
+      'LIMIT 10 rows, only confirmed status, value column truncated to 120 chars',
+      'LIMIT 100 rows, all statuses',
+      'Returns one row at a time'
+    ],
+    correct: 1,
+    explain: 'Three-layer bound: <strong>WHERE status=\'confirmed\'</strong> (skip pending agent observations), <strong>LIMIT 10</strong> (cap row count), <strong>SUBSTRING(value, 1, 120)</strong> (each fact ≤120 chars). Memory is signal, not full notes — owners write longer context elsewhere.',
+    cite: 'server/agents/tools.js:307-327'
+  },
+  {
+    cat: 'Tools',
+    q: 'What happens to a sub-agent\'s response before it returns to Chief?',
+    options: [
+      'Returned verbatim',
+      'Summarized by Haiku into 200 words',
+      'Truncated to 1500 chars (full text already streamed to user)',
+      'Discarded — Chief gets only success/failure'
+    ],
+    correct: 2,
+    explain: 'Sub-agent response is truncated to <strong>1500 chars</strong> before being injected as a tool_result back into Chief\'s context. The full response was already streamed live to the user via SSE, so Chief just needs a digest to decide its next move. Without this, multi-step Chief orchestration would balloon context.',
+    cite: 'server/agents/delegate.js:72-75'
+  },
+  {
+    cat: 'Tools',
+    q: 'Why does set_confidence flag requires_review when the score is < 0.7?',
+    options: [
+      'Random heuristic',
+      'It\'s a UI hint to the owner to scrutinize the draft more carefully — high-confidence drafts can be one-click sent',
+      'Low-confidence drafts are auto-rejected',
+      'It blocks the agent from saving'
+    ],
+    correct: 1,
+    explain: 'After every draft save, the agent calls <code>set_confidence({ score, reasoning })</code>. <strong>≥ 0.7 = "looks good"</strong> in the UI; <strong>< 0.7 = "review carefully"</strong> badge. The agent\'s self-assessment isn\'t binding (owner always approves), but it directs attention. Directly addresses the judge concern about agent overconfidence.',
+    cite: 'server/agents/tools.js:271-299'
+  },
+
+  // ─────────────────────────── SSE STREAMING ───────────────────────────
+  {
+    cat: 'SSE Streaming',
+    q: 'What transport does agent streaming use?',
+    options: [
+      'WebSockets',
+      'Server-Sent Events (text/event-stream)',
+      'gRPC streaming',
+      'Long polling'
+    ],
+    correct: 1,
+    explain: '<strong>SSE</strong>, not WebSockets. Headers: <code>Content-Type: text/event-stream</code>, <code>Cache-Control: no-cache</code>, <code>Connection: keep-alive</code>. Uni-directional (server → client) is all we need; the client uses the EventSource API. Simpler than WS, no auth dance, plays nice with HTTP/2.',
+    cite: 'server/routes/agents.js:45-50'
+  },
+  {
+    cat: 'SSE Streaming',
+    q: 'Which event tells the frontend an agent finished and includes token/cost data?',
+    options: [
+      'done',
+      'agent_complete (includes duration_ms, input_tokens, output_tokens, cache_read, cost_estimate_usd)',
+      'finish_reason',
+      'success'
+    ],
+    correct: 1,
+    explain: '<code>agent_complete</code> is the structured terminal event with full telemetry. <code>done</code> closes the SSE stream after. The frontend uses <code>agent_complete</code> to update the agent log row and show "Cost: $0.0023" in the UI — visible cost transparency was a judge ask.',
+    cite: 'server/agents/dispatcher.js (yields), server/routes/agents.js'
+  },
+  {
+    cat: 'SSE Streaming',
+    q: 'When Chief delegates to a sub-agent, how does the user see the sub-agent\'s output?',
+    options: [
+      'Only the final Chief synthesis is shown',
+      'Sub-agent events are forwarded to the SSE stream tagged with delegated_by: parentAgentId',
+      'Sub-agent runs silently; output only in logs',
+      'A separate WebSocket connection per delegation'
+    ],
+    correct: 1,
+    explain: 'All sub-agent events (text, tool_call, tool_result, draft_saved) are forwarded to the same SSE stream, with <code>delegated_by: \'chief\'</code> attached. The UI can render them as nested cards under Chief\'s turn. Live transparency — user sees what each specialist is doing.',
+    cite: 'server/agents/delegate.js:59'
+  },
+
+  // ─────────────────────────── TOKEN BUDGET ───────────────────────────
+  {
+    cat: 'Token Budget',
+    q: 'What is the default per-user daily token budget?',
+    options: ['100,000', '500,000', '2,000,000', 'Unlimited'],
+    correct: 2,
+    explain: '<code>DAILY_TOKEN_BUDGET</code> defaults to <strong>2,000,000 tokens/user/day</strong>, override via env. At Haiku pricing (~$0.80/M input + $4/M output), a fully-burned day caps cost at roughly $5–7 per user. Resets at <strong>midnight UTC</strong> via <code>WHERE created_at >= CURRENT_DATE</code>.',
+    cite: 'server/agents/token-budget.js:5'
+  },
+  {
+    cat: 'Token Budget',
+    q: 'How is the budget check estimated for a Chief call vs a regular agent?',
+    options: [
+      'Same estimate for both',
+      'Regular agent ~5,000 tokens; Chief gets 15,000 × 3x multiplier = ~45,000 (accounts for delegation overhead)',
+      'Chief is half the cost (it just delegates)',
+      'Estimated by Anthropic\'s API'
+    ],
+    correct: 1,
+    explain: 'Chief estimate = <code>15,000 × CHIEF_COST_MULTIPLIER (3) = 45,000</code> tokens. The 3× accounts for: Chief\'s own context + sub-agent context + tool roundtrips. Regular specialist = 5,000. If <code>budget_remaining < estimate</code>, the request is refused before any API call — emits a <code>budget_exceeded</code> SSE event.',
+    cite: 'server/agents/token-budget.js:43-58, server/agents/dispatcher.js'
+  },
+  {
+    cat: 'Token Budget',
+    q: 'Where is per-call token cost actually measured (not estimated)?',
+    options: [
+      'Estimated only — never measured',
+      'From the agent_complete event\'s usage object (input/output/cache_creation/cache_read)',
+      'Polled from Anthropic billing API',
+      'Counted character-by-character on the server'
+    ],
+    correct: 1,
+    explain: 'Anthropic returns a usage object on every API response. The dispatcher reads <code>input_tokens</code>, <code>output_tokens</code>, <code>cache_creation_input_tokens</code>, <code>cache_read_input_tokens</code>, applies <code>MODEL_PRICING</code>, and writes the totals to the <code>agent_logs</code> row. Estimates gate; actuals account.',
+    cite: 'server/agents/dispatcher.js (estimateCost + agent_logs insert)'
+  },
+
+  // ─────────────────────────── HITL & DRAFTS ───────────────────────────
+  {
+    cat: 'HITL & Trust',
+    q: 'How does an agent-created proposal actually get sent to a client?',
+    options: [
+      'Agent calls a send_proposal tool',
+      'Agent saves with status=pending_approval; owner approves in Drafts inbox; POST /api/drafts/proposal/send transitions to sent + writes audit_log',
+      'Auto-sent after 5 minutes',
+      'Email is composed by the agent'
+    ],
+    correct: 1,
+    explain: '<strong>Agents have zero send capability.</strong> They write <code>pending_approval</code> rows. Owner reviews in Drafts inbox, clicks send, which fires an atomic transaction: <code>UPDATE ... SET status=\'sent\', approved_by, approved_at, sent_at WHERE status=\'pending_approval\'</code> + audit_log insert. The 409 on rowCount=0 prevents double-sends.',
+    cite: 'server/routes/drafts.js:54-115'
+  },
+  {
+    cat: 'HITL & Trust',
+    q: 'How is the unified Drafts inbox built across proposal/invoice/contract tables?',
+    options: [
+      '3 separate API calls merged client-side',
+      'A SQL UNION across the three tables, filtered by status=pending_approval, sorted newest-first, capped at 100',
+      'A materialized view',
+      'A drafts table that mirrors all three'
+    ],
+    correct: 1,
+    explain: 'A single <code>UNION ALL</code> query selects (resource_type, id, project_id, status, confidence, created_at, title, amount_cents, project_name, client_name) from each table where <code>status=\'pending_approval\'</code>, ORDER BY created_at DESC LIMIT 100. One round-trip, sorted server-side.',
+    cite: 'server/routes/drafts.js:11-47'
+  },
+  {
+    cat: 'HITL & Trust',
+    q: 'What is the agent_memory pending → confirmed flow?',
+    options: [
+      'Agents write confirmed directly',
+      'Agents write status=pending; owner approves in Memory Drawer to promote to confirmed; only confirmed memory is read back',
+      'Memory is read-only',
+      'A weekly cron auto-confirms after 7 days'
+    ],
+    correct: 1,
+    explain: 'Two-tier trust on agent observations. Agent writes <code>(source=\'agent\', status=\'pending\')</code>. Memory Drawer surfaces pending facts; owner promotes to <code>confirmed</code> via PATCH. <code>read_client_memory</code> filters to <code>status=\'confirmed\'</code> only — agents never read their own un-vetted observations back.',
+    cite: 'server/routes/memory.js:92-109, server/agents/tools.js:307-327'
+  },
+  {
+    cat: 'HITL & Trust',
+    q: 'What is the auto-trigger dedup window?',
+    options: [
+      'No dedup',
+      '60 seconds — checks automation_runs for same (user_id, trigger_type, trigger_resource_id)',
+      '24 hours',
+      '5 minutes'
+    ],
+    correct: 1,
+    explain: 'When a milestone gets approved, we don\'t want a double-click or race to spawn two invoice drafts. The auto-trigger checks <code>automation_runs</code> for a matching row in the last 60s. Note: SELECT-then-INSERT isn\'t atomic — flagged in post-hackathon-plan.md as a Phase 1 fix (use a unique constraint instead).',
+    cite: 'server/agents/auto-triggers.js:29'
+  },
+
+  // ─────────────────────────── WORKFLOWS ───────────────────────────
+  {
+    cat: 'Workflows',
+    q: 'What does onboardingWorkflow do?',
+    options: [
+      'Creates a user account',
+      'Drafts a proposal, then in parallel drafts a contract aligned to the proposal AND a 50% deposit invoice',
+      'Sends an onboarding email',
+      'Tutorials in the UI'
+    ],
+    correct: 1,
+    explain: '3 steps with declared dependencies: (1) <strong>proposal</strong>, (2) <strong>contract</strong> (dependsOn: [\'proposal\']), (3) <strong>invoice</strong> (dependsOn: [\'proposal\']). The runWorkflow executor runs ready steps in <code>Promise.all</code> — contract and invoice fire in parallel once proposal completes. All three land as pending_approval.',
+    cite: 'server/agents/dispatcher.js:275-281'
+  },
+  {
+    cat: 'Workflows',
+    q: 'What auto-trigger fires when a client approves a milestone via the portal?',
+    options: [
+      'Email sent to owner',
+      'triggerInvoiceFromMilestone — Invoice agent drafts an invoice for the milestone amount',
+      'Project marked complete',
+      'Nothing automated'
+    ],
+    correct: 1,
+    explain: 'Fire-and-forget call from <code>client-portal.js</code> after the milestone status flips to approved. Dispatches the Invoice agent with "Create an invoice for [milestone title] ([amount])". Result lands in Drafts inbox, automation_runs records the chain. Token budget gates the trigger; over-budget records as <code>status=\'budget_blocked\'</code>.',
+    cite: 'server/routes/client-portal.js:80, server/agents/auto-triggers.js:90-125'
+  },
+
+  // ─────────────────────────── KNOWLEDGE BASE ───────────────────────────
+  {
+    cat: 'Knowledge & Memory',
+    q: 'How does domain expertise (pricing psychology, contract landmines, etc.) reach the model?',
+    options: [
+      'Stuffed into every system prompt',
+      'A read_knowledge tool — agents fetch a specific topic on-demand (~600 chars per topic)',
+      'Vector search over Notion',
+      'Hardcoded as if/else in the agent'
+    ],
+    correct: 1,
+    explain: '<strong>Just-in-time RAG</strong>. The <code>knowledge.js</code> module exports a flat object keyed by topic (pricing_psychology, contract_landmines, scope_creep_phrases, etc.). Agents call <code>read_knowledge({ topic })</code> only when relevant. Keeps system prompts under the 200-word cap while still letting agents reach for deep expertise.',
+    cite: 'server/agents/knowledge.js'
+  },
+  {
+    cat: 'Knowledge & Memory',
+    q: 'What\'s the difference between client_memory and workspace_memory?',
+    options: [
+      'Same thing, two tables for redundancy',
+      'client_memory is per-(user,client); workspace_memory is per-user only (default rates, contract preferences, known patterns)',
+      'workspace_memory is for admin users',
+      'workspace_memory is the agent\'s own memory'
+    ],
+    correct: 1,
+    explain: 'Two scopes of learned context. <strong>client_memory</strong> = facts about a specific client (Acme prefers Net-15, has a slow legal team). <strong>workspace_memory</strong> = workspace-wide patterns (default contract requires kill-fee, hourly rate is $X, red-flag phrases this freelancer cares about). Both have the same pending/confirmed flow.',
+    cite: 'server/schema.sql:207-234'
+  },
+
+  // ─────────────────────────── JUDGE FEEDBACK ───────────────────────────
+  {
+    cat: 'Judge Feedback',
+    q: 'Judges flagged the client portal as a security area. What did we add to address provenance and trust?',
+    options: [
+      'Two-factor auth on the portal',
+      'audit_log table tracking actor_type (owner/agent/client_portal/approver), confidence scores on drafts, and pending → confirmed memory flow',
+      'A new password requirement',
+      'Removed the portal entirely'
+    ],
+    correct: 1,
+    explain: 'Three concrete trust layers: <strong>(1) audit_log</strong> answers "who did what when" with typed actors. <strong>(2) confidence + requires_approval</strong> on every draft answers "should I trust this?". <strong>(3) memory pending/confirmed</strong> answers "what does the agent know vs assume?". The portal hardening (scoped tokens + CSRF) is Phase 1.4.',
+    cite: 'docs/judge-feedback-integration-plan.md, server/schema.sql:184-198'
+  },
+  {
+    cat: 'Judge Feedback',
+    q: 'Judges said "smart model selection (Sonnet for complex, Haiku for simpler)". What\'s the honest current state?',
+    options: [
+      'Implemented as described',
+      'Both MODELS.FAST and MODELS.SMART point to Haiku 4.5 — Sonnet is commented out (cost-optimized for hackathon, integrity flagged in CLAUDE.md)',
+      'We use Opus for everything',
+      'The dispatcher dynamically chooses per query'
+    ],
+    correct: 1,
+    explain: 'Honest answer: <strong>not yet implemented</strong>. The plumbing is there (<code>MODELS.FAST</code> vs <code>MODELS.SMART</code> constants, per-agent assignment), but both currently point to Haiku 4.5. Reasoning: hackathon cost discipline. CLAUDE.md flags it as known integrity gap. Easy flip to enable Sonnet for Contract once we have budget.',
+    cite: 'server/agents/agent-config.js:4-8, CLAUDE.md'
+  },
+  {
+    cat: 'Judge Feedback',
+    q: 'How do we measure cost transparency on every agent run?',
+    options: [
+      'Monthly Anthropic billing dashboard',
+      'agent_complete SSE event includes input_tokens, output_tokens, cache_read, and cost_estimate_usd; agent_logs row stores the totals for daily budget enforcement',
+      'We don\'t — costs are opaque',
+      'A nightly cron pulls Anthropic\'s API'
+    ],
+    correct: 1,
+    explain: 'Real-time. Every Anthropic response includes a usage object. The dispatcher applies <code>MODEL_PRICING</code> ($0.80 input / $4 output / $0.08 cache_read per M for Haiku 4.5), emits cost on the <code>agent_complete</code> event, and persists to <code>agent_logs</code>. Daily SUM gates further runs. Cost visibility was a direct judge ask.',
+    cite: 'server/agents/dispatcher.js:16-24, agent_complete event'
+  },
+  {
+    cat: 'Judge Feedback',
+    q: 'Why are agents prevented from sending anything client-facing themselves?',
+    options: [
+      'Anthropic API limitation',
+      'HITL by design — agents draft pending_approval rows; only the human owner can transition to sent. Addresses judge concern about accuracy and accountability.',
+      'Cost — sending costs extra tokens',
+      'It was never decided'
+    ],
+    correct: 1,
+    explain: 'Architectural commitment. <strong>Agents have no tool that sends.</strong> <code>save_proposal</code>, <code>create_invoice</code>, <code>save_contract</code> all hardcode <code>status=\'pending_approval\', requires_approval=TRUE</code>. <code>update_invoice_status</code> only allows transitioning to draft/overdue, never sent/paid. The send transition is owner-only via <code>POST /api/drafts/:resource/send</code> with a transaction + audit_log entry.',
+    cite: 'server/agents/tools.js (all save_*), server/routes/drafts.js:54-115'
+  },
+  {
+    cat: 'Judge Feedback',
+    q: 'Judges asked for evidence of estimation accuracy. What\'s the planned mechanism?',
+    options: [
+      'A backtest tool comparing agent estimates (proposal pricing, change-order amounts) against final paid amounts; surfaced as accuracy KPI in Insight agent',
+      'Trust the agent',
+      'Manual spreadsheet review',
+      'Customer surveys'
+    ],
+    correct: 0,
+    explain: 'Planned in Phase 2.6 of post-hackathon-plan.md. The infra is in place: <code>agent_logs</code> stores agent outputs, proposals/invoices have final paid amounts. The backtest joins them and computes mean absolute % error. Insight agent will surface this as "Your proposals come in 12% under final billed" — turns the agent into an accountable forecaster.',
+    cite: 'docs/post-hackathon-plan.md (Phase 2.6)'
+  },
+
+  // ─────────────────────────── BONUS: SURPRISING DETAILS ───────────────────────────
+  {
+    cat: 'Deep Cuts',
+    q: 'Why does update_invoice_status only allow "draft" and "overdue", not "sent" or "paid"?',
+    options: [
+      'It\'s a bug',
+      'Agents can mark drafts back to draft or auto-flag overdue, but sent/paid require owner action and an audit_log row',
+      'Anthropic API constraint',
+      'Random arbitrary choice'
+    ],
+    correct: 1,
+    explain: '<strong>Trust boundary in code.</strong> The tool whitelists <code>[\'draft\', \'overdue\']</code>. Agents can\'t self-promote a draft to sent or claim an invoice was paid — those are real-world events that need human verification. The auto-trigger sweep that flips overdue is allowed because it\'s deterministic (due_date < now AND status=sent).',
+    cite: 'server/agents/tools.js:178-202'
+  },
+  {
+    cat: 'Deep Cuts',
+    q: 'When the Chief delegates and a sub-agent fails, what happens?',
+    options: [
+      'Whole request crashes',
+      'The error is forwarded as the tool_result, Chief gets a structured failure and can retry, change strategy, or report',
+      'Sub-agent silently retries forever',
+      'User gets a 500'
+    ],
+    correct: 1,
+    explain: 'Sub-agent exceptions are caught in <code>executeDelegation</code> and returned as <code>{ success: false, error: "..." }</code> tool_result to Chief. Chief\'s system prompt instructs it to handle failures gracefully — retry once, switch agent, or surface a useful summary. Same shape as any other failed tool.',
+    cite: 'server/agents/delegate.js:34-84'
+  },
+  {
+    cat: 'Deep Cuts',
+    q: 'What single env var change disables the entire agent feature surface?',
+    options: [
+      'NODE_ENV=production',
+      'Removing ANTHROPIC_API_KEY — the SDK init throws at startup; gating logic surfaces the cause clearly',
+      'DAILY_TOKEN_BUDGET=0',
+      'There\'s no kill switch'
+    ],
+    correct: 1,
+    explain: 'The Anthropic SDK reads <code>ANTHROPIC_API_KEY</code> from env. Missing it throws at module load. Setting <code>DAILY_TOKEN_BUDGET=0</code> achieves a softer kill — every request returns <code>budget_exceeded</code>. Both are reversible at the Railway env panel without redeploy.',
+    cite: 'server/agents/dispatcher.js:7'
+  },
+  {
+    cat: 'Deep Cuts',
+    q: 'Why does agent_logs store input/output as 500-char summaries, not full conversations?',
+    options: [
+      'Privacy regulation',
+      'Token discipline + DB hygiene — a year of full conversations would be GBs; summaries are enough for daily budget aggregation, debugging, and the "recent activity" UI',
+      'Anthropic forbids storage',
+      'Bug — should store full text'
+    ],
+    correct: 1,
+    explain: '<strong>500-char input summary, 500-char output summary, plus iteration count, model, and token totals.</strong> Enough to: (1) identify what the user asked, (2) show what the agent answered, (3) sum tokens for daily budget, (4) build a per-user activity timeline. Full conversations live in user-scoped chat history in the UI; the log is for accounting.',
+    cite: 'server/agents/dispatcher.js (agent_logs insert)'
+  }
+];
+
+// ─── State ────────────────────────────────────────────────────────────────
+let state = {
+  filtered: QUESTIONS,
+  index: 0,
+  answers: [],   // { qIdx, picked, correct }
+  category: 'All',
+  reviewMode: false
+};
+
+const $ = id => document.getElementById(id);
+
+// ─── Render ───────────────────────────────────────────────────────────────
+function getCategories() {
+  const cats = new Set(QUESTIONS.map(q => q.cat));
+  return ['All', ...cats];
+}
+
+function renderCategories() {
+  const wrap = $('categories');
+  wrap.innerHTML = '';
+  getCategories().forEach(cat => {
+    const chip = document.createElement('button');
+    chip.className = 'cat-chip' + (cat === state.category ? ' active' : '');
+    const count = cat === 'All' ? QUESTIONS.length : QUESTIONS.filter(q => q.cat === cat).length;
+    chip.innerHTML = `${cat} <span style="opacity:0.6">·${count}</span>`;
+    chip.onclick = () => filterCategory(cat);
+    wrap.appendChild(chip);
+  });
+}
+
+function filterCategory(cat) {
+  state.category = cat;
+  state.filtered = cat === 'All' ? QUESTIONS : QUESTIONS.filter(q => q.cat === cat);
+  state.index = 0;
+  state.answers = [];
+  state.reviewMode = false;
+  $('results').classList.remove('show');
+  renderCategories();
+  renderQuestion();
+  updateStats();
+}
+
+function renderQuestion() {
+  if (state.index >= state.filtered.length) {
+    return showResults();
+  }
+  const q = state.filtered[state.index];
+  const total = state.filtered.length;
+
+  $('progressLabel').textContent = `Question ${state.index + 1} of ${total}`;
+  $('progressCat').textContent = state.category;
+  $('progressFill').style.width = ((state.index) / total * 100) + '%';
+
+  const card = document.createElement('div');
+  card.className = 'question-card';
+  card.innerHTML = `
+    <div class="question-header">
+      <span class="q-tag">${q.cat}</span>
+      <span class="q-num">${state.index + 1} / ${total}</span>
+    </div>
+    <div class="question-text">${q.q}</div>
+    <div class="options" id="optionList"></div>
+    <div class="explanation" id="explanation">
+      <div class="explanation-label">Why this is right</div>
+      <div class="explanation-body" id="explanationBody"></div>
+      <div class="file-cite" id="fileCite"></div>
+    </div>
+    <div class="controls">
+      <button class="btn btn-secondary" onclick="prevQuestion()" ${state.index === 0 ? 'disabled style="opacity:0.4;cursor:not-allowed"' : ''}>← Previous</button>
+      <button class="btn btn-primary" id="nextBtn" disabled onclick="nextQuestion()">Next →</button>
+    </div>
+  `;
+  $('quiz').innerHTML = '';
+  $('quiz').appendChild(card);
+
+  const list = $('optionList');
+  q.options.forEach((opt, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'option';
+    btn.innerHTML = `<span class="option-letter">${String.fromCharCode(65 + i)}</span><span>${opt}</span>`;
+    btn.onclick = () => pickOption(i);
+    list.appendChild(btn);
+  });
+
+  // Re-render previous answer if revisiting
+  const existing = state.answers.find(a => a.qIdx === state.index);
+  if (existing) {
+    revealAnswer(existing.picked);
+  }
+}
+
+function pickOption(picked) {
+  const q = state.filtered[state.index];
+  const isCorrect = picked === q.correct;
+
+  const existing = state.answers.find(a => a.qIdx === state.index);
+  if (!existing) {
+    state.answers.push({ qIdx: state.index, picked, correct: isCorrect });
+  }
+
+  revealAnswer(picked);
+  updateStats();
+}
+
+function revealAnswer(picked) {
+  const q = state.filtered[state.index];
+  const buttons = document.querySelectorAll('#optionList .option');
+  buttons.forEach((btn, i) => {
+    btn.disabled = true;
+    if (i === q.correct) btn.classList.add('correct');
+    else if (i === picked) btn.classList.add('incorrect');
+    else btn.classList.add('dim');
+  });
+
+  $('explanationBody').innerHTML = q.explain;
+  $('fileCite').textContent = q.cite;
+  $('explanation').classList.add('show');
+  $('nextBtn').disabled = false;
+}
+
+function nextQuestion() {
+  state.index++;
+  $('progressFill').style.width = (state.index / state.filtered.length * 100) + '%';
+  if (state.index >= state.filtered.length) {
+    return showResults();
+  }
+  renderQuestion();
+}
+
+function prevQuestion() {
+  if (state.index > 0) {
+    state.index--;
+    renderQuestion();
+  }
+}
+
+function updateStats() {
+  const correct = state.answers.filter(a => a.correct).length;
+  const wrong = state.answers.filter(a => !a.correct).length;
+  const total = state.filtered.length;
+  $('statTotal').textContent = total;
+  $('statCorrect').textContent = correct;
+  $('statWrong').textContent = wrong;
+  if (state.answers.length > 0) {
+    const pct = Math.round(correct / state.answers.length * 100);
+    $('statPct').textContent = pct + '%';
+    $('statPct').className = 'stat-value ' + (pct >= 80 ? 'green' : pct >= 50 ? 'blue' : 'red');
+  } else {
+    $('statPct').textContent = '—';
+  }
+}
+
+function showResults() {
+  $('quiz').innerHTML = '';
+  $('progressFill').style.width = '100%';
+  $('progressLabel').textContent = 'Complete';
+
+  const total = state.answers.length;
+  const correct = state.answers.filter(a => a.correct).length;
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
+
+  $('finalPct').textContent = pct + '%';
+  $('finalDetail').textContent = `${correct} / ${total}`;
+
+  // Animate score ring
+  const circumference = 2 * Math.PI * 78;
+  $('scoreFg').setAttribute('stroke-dasharray', circumference);
+  setTimeout(() => {
+    $('scoreFg').setAttribute('stroke-dashoffset', circumference - (pct / 100 * circumference));
+  }, 100);
+
+  let title = 'Solid run.';
+  let summary = '';
+  if (pct >= 90) { title = 'Judge-ready.'; summary = 'You can defend the architecture cold. Take the stage.'; }
+  else if (pct >= 75) { title = 'Strong fluency.'; summary = 'Tighten up the missed areas and you\'re ready for any technical question.'; }
+  else if (pct >= 50) { title = 'Solid foundation.'; summary = 'Review the missed questions — patterns will emerge.'; }
+  else { title = 'Worth another pass.'; summary = 'The depth here is real. Restart and rebuild fluency in pieces.'; }
+
+  $('resultsTitle').textContent = title;
+  $('resultsSummary').textContent = summary;
+
+  // Per-category breakdown
+  const breakdownData = {};
+  state.answers.forEach(a => {
+    const cat = state.filtered[a.qIdx].cat;
+    if (!breakdownData[cat]) breakdownData[cat] = { correct: 0, total: 0 };
+    breakdownData[cat].total++;
+    if (a.correct) breakdownData[cat].correct++;
+  });
+  const breakdownEl = $('breakdown');
+  breakdownEl.innerHTML = '';
+  Object.entries(breakdownData).sort((a,b)=>a[0].localeCompare(b[0])).forEach(([cat, data]) => {
+    const item = document.createElement('div');
+    item.className = 'breakdown-item';
+    const catPct = Math.round(data.correct / data.total * 100);
+    const color = catPct >= 80 ? 'var(--green)' : catPct >= 50 ? 'var(--blue-light)' : 'var(--red)';
+    item.innerHTML = `<span class="breakdown-name">${cat}</span><span class="breakdown-score" style="color:${color}">${data.correct}/${data.total}</span>`;
+    breakdownEl.appendChild(item);
+  });
+
+  $('results').classList.add('show');
+  document.querySelector('.progress-wrap').style.display = 'none';
+
+  const missed = state.answers.filter(a => !a.correct);
+  $('reviewBtn').style.display = missed.length > 0 ? 'inline-flex' : 'none';
+}
+
+function restartQuiz() {
+  state.index = 0;
+  state.answers = [];
+  state.reviewMode = false;
+  state.filtered = state.category === 'All' ? QUESTIONS : QUESTIONS.filter(q => q.cat === state.category);
+  $('results').classList.remove('show');
+  document.querySelector('.progress-wrap').style.display = '';
+  renderQuestion();
+  updateStats();
+}
+
+function shuffleAndRestart() {
+  state.index = 0;
+  state.answers = [];
+  state.reviewMode = false;
+  const pool = state.category === 'All' ? [...QUESTIONS] : QUESTIONS.filter(q => q.cat === state.category);
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  state.filtered = pool;
+  $('results').classList.remove('show');
+  document.querySelector('.progress-wrap').style.display = '';
+  renderQuestion();
+  updateStats();
+}
+
+function reviewMissed() {
+  const missedIndices = state.answers.filter(a => !a.correct).map(a => a.qIdx);
+  state.filtered = missedIndices.map(i => state.filtered[i]);
+  state.index = 0;
+  state.answers = [];
+  state.reviewMode = true;
+  $('results').classList.remove('show');
+  document.querySelector('.progress-wrap').style.display = '';
+  renderQuestion();
+  updateStats();
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+renderCategories();
+renderQuestion();
+updateStats();
+</script>
+</body>
+</html>

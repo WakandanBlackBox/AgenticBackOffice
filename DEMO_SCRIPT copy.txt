@@ -1,0 +1,167 @@
+# BackOffice Agent -- 3-Minute Video Script
+
+**AI Agents Hackathon #31 | April 12, 2026**
+**Team:** Brent Thomas, Melissa Hamilton, Nia Joseph
+
+Screen recording: deck slides for setup, live app for demo.
+
+---
+
+## [0:00 - 0:15] DECK SLIDE 1: Title
+
+**Screen:** Slide 1 -- "The freelance back office that saves hours"
+
+> "Stop chasing payments. Start getting paid.
+>
+> BackOffice Agent is a freelance operating system powered by five AI agents that handle proposals, invoices, contracts, scope protection, and client approvals -- so freelancers can focus on the work, not the admin."
+
+---
+
+## [0:15 - 0:30] DECK SLIDE 2: The Problem
+
+**Screen:** Slide 2 -- Pain points list with red X icons.
+
+> "Freelancing shouldn't mean drowning in admin. Chasing clients for payments. Sending contracts back and forth over email. Tracking milestones in spreadsheets. No idea what's been paid versus pending. And clients constantly asking 'where are we at?'
+>
+> The average freelancer loses eleven thousand dollars a year to scope creep alone."
+
+---
+
+## [0:30 - 0:45] DECK SLIDE 3: The Solution
+
+**Screen:** Slide 3 -- "One tool to replace them all" with four feature cards.
+
+> "BackOffice Agent replaces all of that with one platform. AI-generated contracts. Milestone-based payments. A client portal where clients approve work and trigger payments. And a smart dashboard that tracks everything.
+>
+> But what makes this different from every other freelancer tool is the AI. Let me show you."
+
+**Action:** Transition to live app. Landing page loaded.
+
+---
+
+## [0:45 - 0:55] LIVE APP: Landing + Login
+
+**Screen:** Landing page briefly, then login.
+
+> "This is the live product, deployed on Railway."
+
+**Action:** Click "Get Started." Login `demo@backoffice.ai` / `demo1234`. Dashboard loads.
+
+---
+
+## [0:55 - 1:10] LIVE APP: Dashboard
+
+**Screen:** Dashboard with KPIs and upcoming milestones.
+
+> "Forty-seven thousand in the pipeline. Three clients. Thirteen-five in revenue. And right here -- upcoming milestones across all active projects so nothing slips.
+>
+> Let's open Marcus Johnson's MVP dashboard project."
+
+**Action:** Click **StartupX MVP Dashboard** from active projects.
+
+---
+
+## [1:10 - 1:20] LIVE APP: Project Detail
+
+**Screen:** StartupX MVP Dashboard detail. 4 milestones (1 approved, 1 active, 2 pending), Payment Summary, agent buttons.
+
+> "Twenty-four thousand dollar project, already in progress. Wireframes are approved, the core build is underway, two milestones still pending. But there's no proposal, no contract, and no invoice yet. Let's fix that with one request."
+
+**Action:** Click **Open Chat**.
+
+---
+
+## [1:20 - 2:00] LIVE APP: Multi-Agent Delegation
+
+**Action:** Type: `Generate a proposal and contract for this project, and invoice the completed wireframes milestone`
+
+Hit send.
+
+> "One request. Three agents. Watch."
+
+**[As Proposal Agent streams:]**
+
+> "Chief Agent delegates to the Proposal Agent. It pulls the project context and Marcus's client history from the database, then generates a full proposal with deliverables and pricing."
+
+**[As Contract Agent starts:]**
+
+> "Contract Agent takes over -- and receives the proposal output. It aligns scope, payment terms, and timeline with what Proposal just wrote. Flags risky clauses automatically."
+
+**[As Invoice Agent starts:]**
+
+> "Invoice Agent creates a line item for the completed wireframes milestone. Three agents, one request, full coordination. Every database operation is visible and inspectable. This is real multi-agent orchestration -- not a ChatGPT wrapper."
+
+---
+
+## [2:00 - 2:20] LIVE APP: Scope Guardian
+
+**Action:** Type: `Can we also add a user onboarding flow? Just a small addition.`
+
+Hit send.
+
+> "'Also add,' 'small addition' -- scope creep signals."
+
+**[Scope alert fires:]**
+
+> "Scope Guardian intercepts this before the main response. It checked the contract we just generated, flagged the onboarding flow as out of scope, and calculated a change order with hours and cost. That 'small addition' is thousands of dollars most freelancers would have eaten. BackOffice caught it in two seconds for a penny. This is the eleven-thousand-dollar problem, solved with AI."
+
+---
+
+## [2:20 - 2:35] LIVE APP: Client Portal
+
+**Action:** Back to project detail. Click **Share with Client**. Open portal link in new tab.
+
+> "One click generates a client portal link -- no login required. The client sees every milestone, approves completed work, or requests changes. Milestones are sequential -- you can't skip ahead. This is how you build trust and get paid on time."
+
+---
+
+## [2:35 - 2:50] DECK SLIDE 4: How It Works
+
+**Screen:** Slide 4 -- "Two steps to getting paid" with the 01/02 flow.
+
+> "Two steps. The freelancer creates a project and milestones -- the AI generates the contract. The client gets one link to sign, approve milestones, and pay. That simple."
+
+---
+
+## [2:50 - 3:00] DECK SLIDE 8: Close
+
+**Screen:** Slide 8 -- "Ready to stop chasing payments?"
+
+> "Five AI agents. Nineteen database tools. Every interaction costs a penny with prompt caching and token budgets. Seventy-three million freelancers need a back office that runs itself. This is BackOffice Agent."
+
+---
+
+## Flow Summary
+
+| Time | Source | Content |
+|------|--------|---------|
+| 0:00-0:15 | Deck Slide 1 | Title + product intro |
+| 0:15-0:30 | Deck Slide 2 | Pain points |
+| 0:30-0:45 | Deck Slide 3 | Solution overview, transition to app |
+| 0:45-0:55 | Live App | Landing page + login |
+| 0:55-1:10 | Live App | Dashboard |
+| 1:10-1:20 | Live App | Project detail (StartupX MVP) |
+| 1:20-2:00 | Live App | Multi-agent delegation |
+| 2:00-2:20 | Live App | Scope Guardian |
+| 2:20-2:35 | Live App | Client portal |
+| 2:35-2:50 | Deck Slide 4 | How it works recap |
+| 2:50-3:00 | Deck Slide 8 | Close |
+
+---
+
+## Recording Checklist
+
+- [ ] Deck open in presentation mode, start on Slide 1
+- [ ] Live app in separate browser tab, landing page loaded
+- [ ] Login ready: `demo@backoffice.ai` / `demo1234`
+- [ ] Chat history cleared for StartupX MVP Dashboard
+- [ ] Delete the 2 StartupX invoices before recording (clean slate for docs)
+- [ ] Verify StartupX has 4 milestones: 1 approved, 1 active, 2 pending
+- [ ] Verify StartupX has 0 proposals, 0 contracts, 0 invoices
+- [ ] Tested the prompt -- all 3 agents fire
+- [ ] Tested scope creep prompt -- yellow alert triggers
+- [ ] Portal link works
+- [ ] Browser at ~90% zoom
+- [ ] All notifications off
+- [ ] OBS/recorder at 1080p
+- [ ] Practice voiceover twice, then record

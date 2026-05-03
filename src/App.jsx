@@ -2250,37 +2250,370 @@ function ClientsView({ state, dispatch }) {
 
 // ─── Activity Log ─────────────────────────────────────────────
 // ─── Onboarding KB View ──────────────────────────────────────────
-function OnboardingView() {
-  const [open, setOpen] = useState(null);
+function OnboardingView({ dispatch }) {
+  const STORE_DONE = 'onboardingDone';
+  const STORE_OPEN = 'onboardingOpen';
+
+  const [done, setDone] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(STORE_DONE) || '[]')); }
+    catch { return new Set(); }
+  });
+  const [openSet, setOpenSet] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORE_OPEN);
+      if (raw) return new Set(JSON.parse(raw));
+    } catch { /* fallthrough */ }
+    return new Set(['quickstart']);
+  });
+
+  const persistDone = (s) => localStorage.setItem(STORE_DONE, JSON.stringify([...s]));
+  const persistOpen = (s) => localStorage.setItem(STORE_OPEN, JSON.stringify([...s]));
+
+  const toggleOpen = (id) => {
+    const next = new Set(openSet);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setOpenSet(next); persistOpen(next);
+  };
+  const toggleDone = (id, e) => {
+    if (e) e.stopPropagation();
+    const next = new Set(done);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setDone(next); persistDone(next);
+  };
+  const goView = (view) => dispatch({ type: 'SET_VIEW', view });
+
   const sections = [
-    {
-      title: '1. Set Your Rate',
-      content: 'Research market rates for your skill set and experience level. Factor in taxes (as a 1099 contractor, set aside ~30% for self-employment tax), healthcare, software costs, and unpaid time (admin, sales, learning). A common formula: (desired salary + expenses) / billable hours per year. Start with hourly, move to project-based pricing as you gain confidence in estimating scope.'
-    },
-    {
-      title: '2. Land Your First Client',
-      content: 'Start with your network -- former colleagues, LinkedIn connections, local businesses. Create a simple portfolio showing 2-3 relevant examples (even personal projects count). Write a clear one-liner about what you do and who you help. Send 5 personalized outreach messages per day. When you get a lead, focus on understanding their problem before pitching your solution. Always follow up within 24 hours.'
-    },
-    {
-      title: '3. Protect Your Work',
-      content: 'Never start work without a signed contract. Key terms: scope of work (exactly what you will and will not deliver), payment schedule (50% upfront is standard), revision limits (2-3 rounds), IP transfer (only on final payment), kill fee (25-50% if they cancel mid-project), and timeline with milestones. Use this platform to generate contracts, track milestones, and get client approval at each stage so nothing falls through the cracks.'
-    },
+    { id: 'layout', icon: LayoutDashboard, accent: C.primary,
+      title: 'The Layout',
+      summary: 'Sidebar nav, top bar, and how to move around.',
+      intro: 'Every screen lives inside the same shell -- a sticky left sidebar, a thin top header, and a single content area.',
+      rows: [
+        ['Left sidebar', 'Switches between Dashboard, Projects, Clients, Milestone Board, Drafts Inbox, Agent Memory, AI Chat, Getting Started, and Activity Log.'],
+        ['Top header', 'Shows the current view name, a search box, notifications, and your profile.'],
+        ['Profile menu (bottom-left)', 'Your initials, name, and email. Click the door icon to sign out.'],
+      ],
+      cta: { label: 'Go to Dashboard', view: 'dashboard' } },
+
+    { id: 'dashboard', icon: TrendingUp, accent: C.proposal,
+      title: 'Dashboard',
+      summary: 'Pipeline, ROI, one-click outcomes, and what is due.',
+      intro: 'Your home base. KPI tiles, four One-Click Outcome cards, ROI metrics for the last 30 days, plus active projects and upcoming milestones.',
+      rows: [
+        ['KPI tiles', 'Pipeline value, total clients, revenue (30d), and outstanding invoices with the overdue count.'],
+        ['One-Click Outcomes', 'Recover late payments, get pricing advice, spot scope creep risk, draft proposal from notes -- each card preloads a chat prompt and routes to the right agent.'],
+        ['Agent ROI (30d)', 'Scope creep blocked in dollars, hours saved, average collection time, close rate.'],
+        ['Active Projects + Upcoming Milestones', 'Click any project card to open its detail page.'],
+      ],
+      cta: { label: 'Open Dashboard', view: 'dashboard' } },
+
+    { id: 'clients', icon: Users, accent: C.invoice,
+      title: 'Clients',
+      summary: 'Add and manage the people you work for.',
+      intro: 'A client must exist before you can attach a project to them. Stored fields: name, email, company, free-form notes.',
+      rows: [
+        ['Add Client button', 'Top-right of the Clients screen -- opens an inline form, no modal.'],
+        ['Notes field', 'Use it for hints like "fast payer" or "watch for scope creep" -- agents pick it up as context.'],
+        ['Edit / Delete', 'Per-row actions. Deleting a client with active projects is blocked.'],
+      ],
+      cta: { label: 'Go to Clients', view: 'clients' } },
+
+    { id: 'projects', icon: FolderOpen, accent: C.proposal,
+      title: 'Projects',
+      summary: 'The core unit -- everything else hangs off a project.',
+      intro: 'Every proposal, invoice, contract, scope event, and milestone is attached to a project.',
+      rows: [
+        ['New Project button', 'Top-right. Pick a client, name it, set a budget, paste in scope.'],
+        ['Status badges', 'Active, completed, on-hold. Toggle from the project detail page.'],
+        ['Click any card', 'Opens Project Detail -- where the agents do the work.'],
+      ],
+      cta: { label: 'Go to Projects', view: 'projects' } },
+
+    { id: 'project_detail', icon: Sparkles, accent: C.contract,
+      title: 'Project Detail -- the action hub',
+      summary: 'Five colored buttons that each invoke a specialist agent.',
+      intro: 'The most powerful screen in the product. Header with status + budget, scope text, and five quick-action buttons that fire off a specialist on this exact project.',
+      rows: [
+        ['Generate Proposal', 'Calls the Proposal Agent. Pricing, deliverables, exclusions -- saved as a draft.'],
+        ['Create Invoice', 'Calls the Invoice Agent. Itemized invoice tied to milestones -- saved as a draft.'],
+        ['Draft Contract', 'Calls the Contract Agent. Freelancer-protective draft, flags risky clauses.'],
+        ['Check Scope', 'Calls the Scope Guardian. Reviews the project for creep risk.'],
+        ['Open Chat', 'Inline project-scoped chat panel. Anything you ask is auto-scoped to this project.'],
+      ],
+      cta: { label: 'Open a Project', view: 'projects' } },
+
+    { id: 'milestones', icon: Kanban, accent: C.warning,
+      title: 'Milestones',
+      summary: 'Sequenced gates that make payment unambiguous.',
+      intro: 'Milestones turn an open-ended project into a series of approve-and-pay cycles. Manage them per-project or see all of them on the Milestone Board.',
+      rows: [
+        ['Pending -> Active -> Completed -> Approved', 'Sequential -- milestone #3 cannot activate until #2 is approved.'],
+        ['Auto-Approve vs Approval Needed', 'Set per milestone. Approval-Needed waits on a client decision in the portal.'],
+        ['Share with Client', 'Generates a tokenized portal link valid for 30 days. Sharing again rotates the token.'],
+        ['Auto-trigger', 'When a milestone gets approved, an invoice draft is generated automatically and lands in Drafts Inbox.'],
+      ],
+      cta: { label: 'Open Milestone Board', view: 'kanban' } },
+
+    { id: 'portal', icon: ShieldCheck, accent: C.success,
+      title: 'Client Portal',
+      summary: 'What your client sees -- no login required.',
+      intro: 'A public, token-gated page at /portal/<token>. Polls every 5 seconds. Clients see a clean stepper of your milestones with progress.',
+      rows: [
+        ['Approve / Request Changes', 'Two buttons appear on each completed milestone. Rejecting requires a written reason.'],
+        ['Progress bar', 'Shows X of Y approved with a percentage.'],
+        ['No account needed', 'The link is the credential. Treat it like a password -- and rotate it any time by clicking Share with Client again.'],
+      ] },
+
+    { id: 'chat', icon: MessageSquare, accent: C.primary,
+      title: 'AI Chat',
+      summary: 'Free-form conversation with all six agents.',
+      intro: 'Type anything. The dispatcher routes by intent -- single-domain to a specialist, multi-domain to the Chief.',
+      rows: [
+        ['Quick prompts', '"How am I doing?", "Overdue invoices?", "Pipeline status" -- three buttons in the empty state.'],
+        ['Streaming responses', 'Agent badges, tool-call pills, delegation breadcrumbs. Toggle verbose mode to see the work behind the answer.'],
+        ['Project context', 'Pick a project from the dropdown to scope replies. Leave blank for a global view.'],
+        ['Scope alerts', 'A yellow banner appears before the main reply when the Scope Guardian detects creep.'],
+      ],
+      cta: { label: 'Open AI Chat', view: 'chat' } },
+
+    { id: 'agents', icon: Cpu, accent: C.insight,
+      title: 'The Five Specialist Agents',
+      summary: 'Six total -- five specialists plus a Chief that orchestrates.',
+      intro: 'Each agent owns a single domain with no tool overlap. The Chief delegates whenever a request crosses domains.',
+      agents: [
+        ['Proposal', C.proposal, 'Pricing-anchored proposals with deliverables, timeline, exclusions. Saves as a draft, never sends.'],
+        ['Invoice', C.invoice, 'Itemized invoices tied to milestones. Optimizes Net terms and payment timing.'],
+        ['Contract', C.contract, 'Freelancer-protective contract drafts. Flags risky clauses (unlimited revisions, work-for-hire without escrow, etc.).'],
+        ['Scope Guardian', C.scope, 'Real-time scope creep detector. Surfaces a yellow alert before the main reply.'],
+        ['Insight', C.insight, 'Revenue trends, overdue invoices, pipeline health -- your fractional CFO.'],
+        ['Chief', C.chief, 'Routes multi-domain requests. Coordinates the onboarding workflow (proposal -> contract + invoice).'],
+      ] },
+
+    { id: 'drafts', icon: Inbox, accent: C.warning,
+      title: 'Drafts Inbox',
+      summary: 'Every agent output lands here for human review.',
+      intro: 'Agents do not auto-send. Every proposal, invoice, and contract waits in Drafts until you approve or reject it.',
+      rows: [
+        ['Pending count badge', 'The sidebar shows how many drafts are waiting for review.'],
+        ['Inline preview', 'Expand any draft to read the full content before approving.'],
+        ['Approve / Reject', 'Approve marks it final and surfaces it in Project Detail. Reject deletes it.'],
+      ],
+      cta: { label: 'Open Drafts Inbox', view: 'drafts' } },
+
+    { id: 'memory', icon: Brain, accent: C.insight,
+      title: 'Agent Memory',
+      summary: 'Long-term notes the agents remember about each client.',
+      intro: 'Memories are facts agents learn -- preferred Net terms, payment behavior, communication style. You approve them before they stick.',
+      rows: [
+        ['Pending memories', 'Things an agent proposed to remember -- review before they become permanent context.'],
+        ['Approved memories', 'Get injected into future agent prompts as client context, automatically.'],
+      ],
+      cta: { label: 'Open Agent Memory', view: 'memory' } },
+
+    { id: 'activity', icon: Activity, accent: C.text,
+      title: 'Activity Log & Token Budget',
+      summary: 'Every agent run, with cost and duration.',
+      intro: 'Each agent call is logged with input/output tokens, model, duration, and estimated cost. A daily per-user token budget gates further calls when you hit the cap.',
+      rows: [
+        ['Filter by agent', 'Click any agent badge at the top to filter the log.'],
+        ['Export Logs', 'Downloads the full log as JSON.'],
+        ['Daily budget', 'Default 500k tokens/day. Long delegations use more -- keep an eye on the cost summary in each chat reply.'],
+      ],
+      cta: { label: 'Open Activity Log', view: 'activity' } },
   ];
 
+  const checklist = [
+    { id: 'qs-client', label: 'Add your first client', view: 'clients' },
+    { id: 'qs-project', label: 'Create a project', view: 'projects' },
+    { id: 'qs-proposal', label: 'Generate a proposal (Project Detail -> Generate Proposal)', view: 'projects' },
+    { id: 'qs-draft', label: 'Review and approve the draft', view: 'drafts' },
+    { id: 'qs-share', label: 'Add milestones and share the portal link', view: 'kanban' },
+  ];
+
+  const totalSections = sections.length;
+  const sectionsDone = sections.filter((s) => done.has(s.id)).length;
+  const pct = Math.round((sectionsDone / totalSections) * 100);
+
+  const expandAll = () => {
+    const all = new Set(['quickstart', ...sections.map((s) => s.id)]);
+    setOpenSet(all); persistOpen(all);
+  };
+  const collapseAll = () => { setOpenSet(new Set()); persistOpen(new Set()); };
+
+  const SectionHeader = ({ id, Icon, accent, title, summary, doneId }) => {
+    const isOpen = openSet.has(id);
+    const isDone = doneId && done.has(doneId);
+    return (
+      <button
+        onClick={() => toggleOpen(id)}
+        className="w-full flex items-center gap-4 p-5 text-left transition-colors"
+        style={{ background: 'transparent', border: 'none', cursor: 'pointer', borderRadius: 16 }}>
+        <span className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+          style={{ background: accent + '1A', boxShadow: isOpen ? '0 0 0 1px ' + accent + '55' : 'none' }}>
+          <Icon size={18} style={{ color: accent }} />
+        </span>
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-2">
+            <span className="text-sm font-bold text-foreground tracking-tight">{title}</span>
+            {isDone && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+                style={{ background: C.success + '1F', color: C.success }}>
+                <Check size={10} /> DONE
+              </span>
+            )}
+          </span>
+          <span className="block text-xs text-muted-foreground mt-0.5">{summary}</span>
+        </span>
+        <ChevronDown size={16} className="shrink-0 text-muted-foreground transition-transform"
+          style={{ transform: isOpen ? 'rotate(0deg)' : 'rotate(-90deg)' }} />
+      </button>
+    );
+  };
+
   return (
-    <div>
-      <p className="text-muted-foreground text-sm mb-6">Three things every new freelancer needs to know</p>
-      {sections.map((s, i) => (
-        <Card key={i} className="card-hover mb-3 cursor-pointer hover:border-primary/40" onClick={() => setOpen(open === i ? null : i)}>
-          <CardContent className="pt-5 pb-5">
-            <div className="flex justify-between items-center">
-              <h3 className="text-base font-semibold text-foreground">{s.title}</h3>
-              <span className="text-muted-foreground text-lg transition-transform duration-200" style={{ transform: open === i ? 'rotate(180deg)' : 'none' }}>{'\u25BE'}</span>
+    <div className="max-w-[960px]">
+      <div className="rounded-2xl p-6 mb-5 border" style={{
+        background: 'linear-gradient(135deg, ' + C.surface + ' 0%, ' + C.bg + ' 100%)',
+        borderColor: C.border,
+      }}>
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+            style={{ background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 60%, #3B82F6 100%)', boxShadow: '0 0 24px rgba(37,99,235,0.45)' }}>
+            <BookOpen size={22} color="#fff" />
+          </div>
+          <div className="flex-1 min-w-[240px]">
+            <h2 className="text-lg font-bold tracking-tight text-foreground leading-tight">Welcome -- your guided tour</h2>
+            <p className="text-sm text-muted-foreground mt-0.5">A walkthrough of every screen, agent, and workflow. Click any section to expand it.</p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Progress</div>
+              <div className="text-base font-bold" style={{ color: C.primary }}>{sectionsDone}/{totalSections}</div>
             </div>
-            {open === i && <p className="text-muted-foreground text-sm leading-relaxed mt-3 pt-3 border-t border-border">{s.content}</p>}
+            <div className="w-32 h-2 rounded-full overflow-hidden" style={{ background: C.border }}>
+              <div className="h-full transition-all" style={{ width: pct + '%', background: 'linear-gradient(90deg, ' + C.primary + ', ' + C.accent + ')' }} />
+            </div>
+          </div>
+        </div>
+        <div className="flex gap-2 mt-4">
+          <button onClick={expandAll} style={{ ...S.btnOutline, padding: '6px 12px', fontSize: 12 }}>Expand all</button>
+          <button onClick={collapseAll} style={{ ...S.btnOutline, padding: '6px 12px', fontSize: 12 }}>Collapse all</button>
+          {sectionsDone > 0 && (
+            <button onClick={() => { setDone(new Set()); persistDone(new Set()); }}
+              style={{ ...S.btnOutline, padding: '6px 12px', fontSize: 12, color: C.textMuted, borderColor: C.border }}>
+              Reset progress
+            </button>
+          )}
+        </div>
+      </div>
+
+      <Card className="card-hover mb-3" style={{ overflow: 'hidden' }}>
+        <SectionHeader id="quickstart" Icon={Zap} accent={C.warning}
+          title="Quick Start -- five steps to your first paid milestone"
+          summary={checklist.filter((c) => done.has(c.id)).length + ' of ' + checklist.length + ' complete'} />
+        {openSet.has('quickstart') && (
+          <CardContent className="pt-0 pb-5 px-5">
+            <div className="border-t pt-4" style={{ borderColor: C.border }}>
+              <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+                Run through these in order. Each step has a "Try it" button that takes you straight to the right screen.
+              </p>
+              <div className="flex flex-col gap-2">
+                {checklist.map((c, i) => {
+                  const checked = done.has(c.id);
+                  return (
+                    <div key={c.id}
+                      className="flex items-center gap-3 p-3 rounded-xl border transition-colors"
+                      style={{ borderColor: checked ? C.success + '55' : C.border, background: checked ? C.success + '0A' : C.bg }}>
+                      <button onClick={(e) => toggleDone(c.id, e)}
+                        className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 transition-colors"
+                        style={{
+                          background: checked ? C.success : 'transparent',
+                          border: '1.5px solid ' + (checked ? C.success : C.textDim),
+                          cursor: 'pointer',
+                        }}
+                        aria-label={checked ? 'Mark incomplete' : 'Mark complete'}>
+                        {checked ? <Check size={13} color="#fff" /> : <span className="text-[10px] font-bold text-muted-foreground">{i + 1}</span>}
+                      </button>
+                      <span className="flex-1 text-sm" style={{ color: checked ? C.textMuted : C.text, textDecoration: checked ? 'line-through' : 'none' }}>
+                        {c.label}
+                      </span>
+                      <button onClick={() => goView(c.view)} style={{ ...S.btnOutline, padding: '5px 12px', fontSize: 11 }}>
+                        Try it
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </CardContent>
-        </Card>
-      ))}
+        )}
+      </Card>
+
+      {sections.map((s) => {
+        const isOpen = openSet.has(s.id);
+        return (
+          <Card key={s.id} className="card-hover mb-3" style={{ overflow: 'hidden' }}>
+            <SectionHeader id={s.id} Icon={s.icon} accent={s.accent} title={s.title} summary={s.summary} doneId={s.id} />
+            {isOpen && (
+              <CardContent className="pt-0 pb-5 px-5">
+                <div className="border-t pt-4" style={{ borderColor: C.border }}>
+                  {s.intro && <p className="text-sm text-muted-foreground mb-4 leading-relaxed">{s.intro}</p>}
+
+                  {s.rows && (
+                    <div className="flex flex-col gap-2.5 mb-4">
+                      {s.rows.map(([heading, text], i) => (
+                        <div key={i} className="flex gap-3 p-3 rounded-xl" style={{ background: C.bg, border: '1px solid ' + C.border }}>
+                          <span className="w-1 rounded-full shrink-0 mt-0.5 mb-0.5" style={{ background: s.accent }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-foreground">{heading}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{text}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {s.agents && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mb-4">
+                      {s.agents.map(([name, color, blurb]) => (
+                        <div key={name} className="p-3 rounded-xl flex gap-3" style={{ background: C.bg, border: '1px solid ' + C.border }}>
+                          <span className="w-2 h-2 rounded-full shrink-0 mt-1.5" style={{ background: color, boxShadow: '0 0 10px ' + color + 'aa' }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-bold tracking-wider uppercase" style={{ color }}>{name}</div>
+                            <div className="text-xs text-muted-foreground mt-1 leading-relaxed">{blurb}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {s.cta && (
+                      <button onClick={() => goView(s.cta.view)} style={{ ...S.btn, padding: '8px 16px', fontSize: 12 }}>
+                        {s.cta.label}
+                      </button>
+                    )}
+                    <button onClick={(e) => toggleDone(s.id, e)} style={{
+                      ...S.btnOutline,
+                      padding: '7px 14px',
+                      fontSize: 12,
+                      color: done.has(s.id) ? C.success : '#60A5FA',
+                      borderColor: done.has(s.id) ? C.success + '55' : 'rgba(37,99,235,0.5)',
+                    }}>
+                      {done.has(s.id) ? 'Marked as understood' : 'Mark as understood'}
+                    </button>
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+        );
+      })}
+
+      <div className="text-center mt-6 mb-2">
+        <p className="text-xs text-muted-foreground">
+          Need this tour again? It is always here under <span style={{ color: C.text }}>Getting Started</span> in the sidebar.
+        </p>
+      </div>
     </div>
   );
 }
