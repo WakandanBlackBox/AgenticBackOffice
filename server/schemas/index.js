@@ -97,6 +97,26 @@ export const rejectMilestoneSchema = z.object({
   reason: z.string().min(1).max(500)
 });
 
+// Document PATCH schemas. Status enums mirror the post-migration CHECK
+// constraints in server/schema.sql. The drift snapshot test (Phase 2) will
+// catch any divergence.
+export const updateProposalSchema = z.object({
+  status: z.enum(['draft', 'pending_approval', 'sent', 'accepted', 'rejected']).optional(),
+  content: z.record(z.any()).optional()
+}).strict();
+
+export const updateInvoiceSchema = z.object({
+  status: z.enum(['draft', 'pending_approval', 'sent', 'paid', 'overdue']).optional(),
+  line_items: z.array(z.any()).optional(),
+  total_cents: z.number().int().nonnegative().optional(),
+  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+}).strict();
+
+export const updateContractSchema = z.object({
+  status: z.enum(['draft', 'pending_approval', 'sent', 'signed']).optional(),
+  content: z.record(z.any()).optional()
+}).strict();
+
 // Share tokens
 export const createShareTokenSchema = z.object({
   project_id: z.string().uuid(),

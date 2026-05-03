@@ -1,11 +1,17 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import db from '../db.js';
-import { signToken, requireAuth } from '../middleware/auth.js';
+import { signToken, requireAuth, setAuthCookie, clearAuthCookie } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { registerSchema, loginSchema } from '../schemas/index.js';
+import { generateCsrfToken, setCsrfCookie, clearCsrfCookie } from '../middleware/csrf.js';
 
 const router = Router();
+
+function startSession(res, user) {
+  setAuthCookie(res, signToken(user));
+  setCsrfCookie(res, generateCsrfToken());
+}
 
 router.post('/register', validate(registerSchema), async (req, res) => {
   const { email, password, name, business_name, hourly_rate_cents } = req.validated;
@@ -19,7 +25,8 @@ router.post('/register', validate(registerSchema), async (req, res) => {
     [email, hash, name, business_name || null, hourly_rate_cents || null]
   );
 
-  res.status(201).json({ token: signToken(user), user });
+  startSession(res, user);
+  res.status(201).json({ user });
 });
 
 router.post('/login', validate(loginSchema), async (req, res) => {
@@ -31,8 +38,15 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   const valid = await bcrypt.compare(password, user.password_hash);
   if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
-  const { password_hash, ...safe } = user;
-  res.json({ token: signToken(safe), user: safe });
+  const { password_hash: _password_hash, ...safe } = user;
+  startSession(res, safe);
+  res.json({ user: safe });
+});
+
+router.post('/logout', (_req, res) => {
+  clearAuthCookie(res);
+  clearCsrfCookie(res);
+  res.json({ ok: true });
 });
 
 router.get('/me', requireAuth, async (req, res) => {

@@ -51,6 +51,14 @@ router.post('/', validate(createProjectSchema), async (req, res) => {
   res.status(201).json({ project });
 });
 
+router.delete('/:id', async (req, res) => {
+  // Hard delete. FK cascades on proposals, invoices, contracts, scope_events,
+  // and milestones (server/schema.sql) clear dependent rows.
+  const result = await db.query('DELETE FROM projects WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+  if (result.rowCount === 0) return res.status(404).json({ error: 'Project not found' });
+  res.json({ deleted: true });
+});
+
 router.patch('/:id', validate(updateProjectSchema), async (req, res) => {
   const fields = Object.entries(req.validated).filter(([, v]) => v !== undefined);
   if (fields.length === 0) return res.status(400).json({ error: 'No fields to update' });

@@ -60,14 +60,25 @@ const timeAgo = (date) => {
   return Math.floor(s / 86400) + 'd ago';
 };
 
+// Read a cookie value by name (used for the readable CSRF token).
+const readCookie = (name) => {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'));
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
+const SAFE_METHODS = new Set(['GET', 'HEAD']);
+
 const api = async (path, opts = {}) => {
-  const token = localStorage.getItem('token');
+  const method = opts.method || 'GET';
+  const headers = { 'Content-Type': 'application/json' };
+  if (!SAFE_METHODS.has(method)) {
+    const csrf = readCookie('csrf_token');
+    if (csrf) headers['X-CSRF-Token'] = csrf;
+  }
   const res = await fetch(`/api${path}`, {
-    method: opts.method || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
+    method,
+    headers,
+    credentials: 'include',
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (!res.ok) {
@@ -83,10 +94,11 @@ const streamChat = async (message, projectId, dispatch, abortSignal) => {
   dispatch({ type: 'CHAT_STREAM_START' });
 
   try {
-    const token = localStorage.getItem('token');
+    const csrf = readCookie('csrf_token');
     const res = await fetch('/api/agents/chat', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      headers: { 'Content-Type': 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+      credentials: 'include',
       body: JSON.stringify({ message, project_id: projectId }),
       signal: abortSignal,
     });
@@ -143,8 +155,14 @@ const streamChat = async (message, projectId, dispatch, abortSignal) => {
 };
 
 // ─── Reducer ──────────────────────────────────────────────────────
+// `authed` is a transient bool - the JWT lives in an HttpOnly cookie the
+// SPA can't read. We optimistically set authed=true on boot and let
+// /auth/me confirm or reject it. The legacy 'token' localStorage key is
+// cleared if present so older sessions migrate cleanly.
+const bootAuthed = !!localStorage.getItem('token') || document.cookie.includes('csrf_token=');
+if (localStorage.getItem('token')) localStorage.removeItem('token');
 const initialState = {
-  view: 'auth', user: null, token: localStorage.getItem('token'),
+  view: 'auth', user: null, authed: bootAuthed,
   authMode: 'login', authError: null,
   dashboard: null, dashboardLoading: false,
   chatMessages: [], chatStreaming: false, chatProjectId: null, activeAgents: [],
@@ -172,23 +190,18 @@ function reducer(state, action) {
       return { ...state, view: action.view };
     }
     case 'SET_AUTH': {
-      localStorage.setItem('token', action.token);
       const savedView = localStorage.getItem('currentView');
-      // Allow restoring project_detail only if we have a stored project_id to
-      // re-fetch (the boot effect handles the actual fetch). Otherwise fall
-      // back to dashboard so the user doesn't land on a broken empty view.
       const hasSavedProject = !!localStorage.getItem('selectedProjectId');
       const canRestoreDetail = savedView === 'project_detail' && hasSavedProject;
       const restoreView = savedView && savedView !== 'auth' && (savedView !== 'project_detail' || canRestoreDetail)
         ? savedView
         : 'dashboard';
-      return { ...state, user: action.user, token: action.token, authError: null, view: restoreView };
+      return { ...state, user: action.user, authed: true, authError: null, view: restoreView };
     }
     case 'LOGOUT': {
-      localStorage.removeItem('token');
       localStorage.removeItem('currentView');
       localStorage.removeItem('selectedProjectId');
-      return { ...initialState, token: null, view: 'auth' };
+      return { ...initialState, authed: false, view: 'auth' };
     }
     case 'SET_CHAT_VERBOSE': {
       localStorage.setItem('chatVerbose', action.verbose ? '1' : '0');
@@ -359,8 +372,8 @@ function AuthView({ state, dispatch }) {
     try {
       const endpoint = state.authMode === 'login' ? '/auth/login' : '/auth/register';
       const body = state.authMode === 'login' ? { email: form.email, password: form.password } : form;
-      const { token, user } = await api(endpoint, { method: 'POST', body });
-      dispatch({ type: 'SET_AUTH', user, token });
+      const { user } = await api(endpoint, { method: 'POST', body });
+      dispatch({ type: 'SET_AUTH', user });
     } catch (err) {
       dispatch({ type: 'SET_AUTH_ERROR', error: err.message });
     }
@@ -504,7 +517,10 @@ function Sidebar({ state, dispatch }) {
           </div>
           <button className="shrink-0 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-white/5"
             style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-            onClick={() => dispatch({ type: 'LOGOUT' })} title="Sign out">
+            onClick={() => {
+              api('/auth/logout', { method: 'POST' }).catch(() => {});
+              dispatch({ type: 'LOGOUT' });
+            }} title="Sign out">
             <LogOut size={14} />
           </button>
         </div>
@@ -1882,7 +1898,8 @@ function ProjectDetail({ state, dispatch }) {
   };
 
   const handleDelete = async () => {
-    await api(`/projects/${project.id}`, { method: 'PATCH', body: { status: 'cancelled' } });
+    await api(`/projects/${project.id}`, { method: 'DELETE' });
+    localStorage.removeItem('selectedProjectId');
     dispatch({ type: 'SET_VIEW', view: 'projects' });
     api('/projects').then(({ projects }) => dispatch({ type: 'SET_PROJECTS', projects })).catch(() => {});
   };
@@ -1971,7 +1988,7 @@ function ProjectDetail({ state, dispatch }) {
 
         {/* Delete confirmation */}
         {showDeleteConfirm && (
-          <ConfirmModal message={`Cancel project "${project.name}"? This will mark it as cancelled.`} onConfirm={() => { setShowDeleteConfirm(false); handleDelete(); }} onCancel={() => setShowDeleteConfirm(false)} />
+          <ConfirmModal message={`Permanently delete project "${project.name}"? This will remove all proposals, invoices, contracts, milestones, and scope events for this project. To keep the record but stop work, use the status menu's "Set cancelled" instead.`} onConfirm={() => { setShowDeleteConfirm(false); handleDelete(); }} onCancel={() => setShowDeleteConfirm(false)} />
         )}
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
@@ -3572,37 +3589,36 @@ export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [showLanding, setShowLanding] = useState(true);
 
-  // Portal detection: render public view if URL matches /portal/:token
+  // Portal pages have their own component below; detect here but do NOT
+  // early-return until after every hook call (rules-of-hooks).
   const portalMatch = window.location.pathname.match(/^\/portal\/([a-f0-9]{64})$/);
+
+  // Boot: validate session via /auth/me, then re-fetch project_detail if
+  // that's the restored view (so a hard refresh on a project page doesn't
+  // drop you back to the dashboard).
+  useEffect(() => {
+    if (portalMatch || state.user) return;
+    api('/auth/me')
+      .then(({ user }) => {
+        dispatch({ type: 'SET_AUTH', user });
+        const savedView = localStorage.getItem('currentView');
+        const savedProjectId = localStorage.getItem('selectedProjectId');
+        if (savedView === 'project_detail' && savedProjectId) {
+          dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' });
+          api(`/projects/${savedProjectId}`)
+            .then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data }))
+            .catch(() => {
+              localStorage.removeItem('selectedProjectId');
+              dispatch({ type: 'SET_VIEW', view: 'dashboard' });
+            });
+        }
+      })
+      .catch(() => { dispatch({ type: 'LOGOUT' }); });
+  }, []);
+
   if (portalMatch) {
     return <ClientPortalView token={portalMatch[1]} />;
   }
-
-  // Boot: validate stored token, then re-fetch project_detail if that's the
-  // restored view (so a hard refresh on a project page doesn't drop you back
-  // to the dashboard).
-  useEffect(() => {
-    if (state.token && !state.user) {
-      api('/auth/me')
-        .then(({ user }) => {
-          dispatch({ type: 'SET_AUTH', user, token: state.token });
-          const savedView = localStorage.getItem('currentView');
-          const savedProjectId = localStorage.getItem('selectedProjectId');
-          if (savedView === 'project_detail' && savedProjectId) {
-            dispatch({ type: 'SET_PROJECT_DETAIL_LOADING' });
-            api(`/projects/${savedProjectId}`)
-              .then((data) => dispatch({ type: 'SET_SELECTED_PROJECT', project: data }))
-              .catch(() => {
-                // Project gone (deleted or no access) — clear stale id and fall
-                // back to dashboard so we don't strand on "Loading project..."
-                localStorage.removeItem('selectedProjectId');
-                dispatch({ type: 'SET_VIEW', view: 'dashboard' });
-              });
-          }
-        })
-        .catch(() => { localStorage.removeItem('token'); dispatch({ type: 'LOGOUT' }); });
-    }
-  }, []);
 
   const globalStyles = `
     .card-hover:hover { border-color: rgba(37,99,235,0.4) !important; box-shadow: 0 0 24px rgba(37,99,235,0.12); }

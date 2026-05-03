@@ -1,11 +1,36 @@
 import { Router } from 'express';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { updateProposalSchema, updateInvoiceSchema, updateContractSchema } from '../schemas/index.js';
 import { triggerOnboardFromAcceptedProposal } from '../agents/auto-triggers.js';
 
 const router = Router();
 
 router.use(requireAuth);
+
+// Column allowlists for PATCH builders. Keys not in the allowlist are
+// silently dropped - Zod has already rejected unknown keys at validation,
+// so this is defense-in-depth against future schema drift.
+const PROPOSAL_COLS = new Set(['status', 'content']);
+const INVOICE_COLS = new Set(['status', 'line_items', 'total_cents', 'due_date']);
+const CONTRACT_COLS = new Set(['status', 'content']);
+const JSONB_COLS = new Set(['content', 'line_items']);
+
+function buildPatch(table, allowed, body, idParams) {
+  const sets = [];
+  const vals = [...idParams];
+  for (const [key, value] of Object.entries(body)) {
+    if (!allowed.has(key) || value === undefined) continue;
+    sets.push(`${key} = $${vals.length + 1}`);
+    vals.push(JSONB_COLS.has(key) ? JSON.stringify(value) : value);
+  }
+  if (!sets.length) return null;
+  return {
+    sql: `UPDATE ${table} SET ${sets.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`,
+    vals
+  };
+}
 
 // === PROPOSALS ===
 router.get('/proposals', async (req, res) => {
@@ -26,26 +51,18 @@ router.get('/proposals/:id', async (req, res) => {
   res.json({ proposal: row });
 });
 
-router.patch('/proposals/:id', async (req, res) => {
-  const { status, content } = req.body;
-  // Snapshot the prior status so we can detect a transition into 'accepted'
-  // and fire the onboarding auto-triggers (contract + deposit invoice).
+router.patch('/proposals/:id', validate(updateProposalSchema), async (req, res) => {
   const prior = await db.one('SELECT status FROM proposals WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id]);
   if (!prior) return res.status(404).json({ error: 'Not found' });
 
-  const sets = []; const vals = [req.params.id, req.user.id];
-  if (status) { sets.push(`status = $${vals.length + 1}`); vals.push(status); }
-  if (content) { sets.push(`content = $${vals.length + 1}`); vals.push(JSON.stringify(content)); }
-  if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-  const row = await db.one(`UPDATE proposals SET ${sets.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`, vals);
+  const built = buildPatch('proposals', PROPOSAL_COLS, req.validated, [req.params.id, req.user.id]);
+  if (!built) return res.status(400).json({ error: 'Nothing to update' });
+  const row = await db.one(built.sql, built.vals);
   if (!row) return res.status(404).json({ error: 'Not found' });
 
-  // Auto-trigger on the transition INTO 'accepted' only — re-PATCHing an
-  // already-accepted proposal should not re-fire (the dedup window in the
-  // trigger module also guards this).
-  if (status === 'accepted' && prior.status !== 'accepted') {
+  if (req.validated.status === 'accepted' && prior.status !== 'accepted') {
     triggerOnboardFromAcceptedProposal(req.user.id, row).catch((err) =>
-      console.error('[auto-trigger] proposal→onboarding failed:', err?.message || err)
+      console.error('[auto-trigger] proposal->onboarding failed:', err?.message || err)
     );
   }
 
@@ -81,15 +98,10 @@ router.get('/invoices/:id', async (req, res) => {
   res.json({ invoice: row });
 });
 
-router.patch('/invoices/:id', async (req, res) => {
-  const { status, line_items, total_cents, due_date } = req.body;
-  const sets = []; const vals = [req.params.id, req.user.id];
-  if (status) { sets.push(`status = $${vals.length + 1}`); vals.push(status); }
-  if (line_items) { sets.push(`line_items = $${vals.length + 1}`); vals.push(JSON.stringify(line_items)); }
-  if (total_cents !== undefined) { sets.push(`total_cents = $${vals.length + 1}`); vals.push(total_cents); }
-  if (due_date) { sets.push(`due_date = $${vals.length + 1}`); vals.push(due_date); }
-  if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-  const row = await db.one(`UPDATE invoices SET ${sets.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`, vals);
+router.patch('/invoices/:id', validate(updateInvoiceSchema), async (req, res) => {
+  const built = buildPatch('invoices', INVOICE_COLS, req.validated, [req.params.id, req.user.id]);
+  if (!built) return res.status(400).json({ error: 'Nothing to update' });
+  const row = await db.one(built.sql, built.vals);
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json({ invoice: row });
 });
@@ -118,13 +130,10 @@ router.get('/contracts/:id', async (req, res) => {
   res.json({ contract: row });
 });
 
-router.patch('/contracts/:id', async (req, res) => {
-  const { status, content } = req.body;
-  const sets = []; const vals = [req.params.id, req.user.id];
-  if (status) { sets.push(`status = $${vals.length + 1}`); vals.push(status); }
-  if (content) { sets.push(`content = $${vals.length + 1}`); vals.push(JSON.stringify(content)); }
-  if (!sets.length) return res.status(400).json({ error: 'Nothing to update' });
-  const row = await db.one(`UPDATE contracts SET ${sets.join(', ')} WHERE id = $1 AND user_id = $2 RETURNING *`, vals);
+router.patch('/contracts/:id', validate(updateContractSchema), async (req, res) => {
+  const built = buildPatch('contracts', CONTRACT_COLS, req.validated, [req.params.id, req.user.id]);
+  if (!built) return res.status(400).json({ error: 'Nothing to update' });
+  const row = await db.one(built.sql, built.vals);
   if (!row) return res.status(404).json({ error: 'Not found' });
   res.json({ contract: row });
 });
